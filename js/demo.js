@@ -75,6 +75,6 @@ export function makeDemo(now = Date.now()) {
   });
   return {
     app: 'gym', schema: 1, exportedAt: new Date(now).toISOString(),
-    data: { exercises: [], workouts, routines, measurements, gyms: [{ id: 'demo-g1', name: 'City gym', color: '#3987e5' }, { id: 'demo-g2', name: 'Campus gym', color: '#d95926' }], profile: { birth: '2001-03-14', heightCm: 182 }, settings: { range: '1Y' }, meta: { demo: true } },
+    data: { exercises: [], workouts, routines, measurements, gyms: [{ id: 'demo-g1', name: 'City gym', shade: 0 }, { id: 'demo-g2', name: 'Campus gym', shade: 2 }], profile: { birth: '2001-03-14', heightCm: 182 }, settings: { range: '1Y' }, meta: { demo: true } },
   };
 }

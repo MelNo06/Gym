@@ -1,10 +1,11 @@
 // All app data lives in memory in `S` and is persisted to IndexedDB on the device.
-import { LIBRARY } from './library.js';
+import { LIBRARY, DEFAULT_GROUPS, toGroup } from './library.js';
+import { shade } from './colors.js';
 import { dayKey, parseDay } from './util.js';
 
-export const APP_VERSION = '1.1.0';
-const DB = 'gym', STORE = 'kv', SCHEMA = 1;
-const KEYS = ['exercises', 'workouts', 'routines', 'measurements', 'gyms', 'profile', 'settings', 'active', 'meta'];
+export const APP_VERSION = '1.2.0';
+const DB = 'gym', STORE = 'kv', SCHEMA = 2;
+const KEYS = ['exercises', 'workouts', 'routines', 'measurements', 'gyms', 'groups', 'profile', 'settings', 'active', 'meta'];
 
 export const TYPES = {
   weight: 'Weight × reps',
@@ -15,12 +16,11 @@ export const TYPES = {
   dist: 'Distance',
 };
 export const EQUIP = ['barbell', 'dumbbell', 'machine', 'cable', 'bodyweight', 'kettlebell', 'band', 'other'];
-export const MUSCLES = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'forearms', 'quads', 'hamstrings', 'glutes', 'calves', 'abs', 'full body', 'cardio'];
 export const isBW = ex => ex.type === 'wbw' || ex.type === 'abw' || ex.type === 'bw';
 export const hasReps = ex => ex.type !== 'time' && ex.type !== 'dist';
 
 const blank = () => ({
-  exercises: [], workouts: [], routines: [], measurements: [], gyms: [],
+  exercises: [], workouts: [], routines: [], measurements: [], gyms: [], groups: [],
   profile: {}, settings: { range: '3M' }, active: null, meta: {},
 });
 export const S = blank();
@@ -67,14 +67,28 @@ function normalize() {
   const d = blank();
   for (const k of KEYS) if (S[k] == null && k !== 'active') S[k] = d[k];
   S.settings = { ...d.settings, ...S.settings };
+  // ---- upgrades from older versions (each step is safe to run again) ----
+  const dirty = new Set();
+  if (!S.meta.groupsSeeded) {                      // 1.2: muscle groups with colours
+    if (!S.groups.length) S.groups = DEFAULT_GROUPS.map(g => ({ ...g }));
+    S.meta.groupsSeeded = true; dirty.add('groups').add('meta');
+  }
+  for (const e of S.exercises) if (!('group' in e)) {   // 1.2: free-text muscle -> group
+    const g = toGroup(e.muscle);
+    e.group = S.groups.some(x => x.id === g) ? g : null; delete e.muscle; dirty.add('exercises');
+  }
+  S.gyms.forEach((g, i) => {                       // 1.2: a gym has a shade, not a colour of its own
+    if (g.shade == null) { g.shade = [0, 1, -1, 2, -2][i % 5]; delete g.color; dirty.add('gyms'); }
+  });
   // Merge built-in exercises that are new to this device. Never overwrite the user's edits.
   const have = new Set(S.exercises.map(e => e.id));
   const removed = new Set(S.meta.removedBuiltin || []);
-  let added = 0;
-  for (const e of LIBRARY) if (!have.has(e.id) && !removed.has(e.id)) { S.exercises.push({ ...e }); added++; }
+  for (const e of LIBRARY) if (!have.has(e.id) && !removed.has(e.id)) {
+    S.exercises.push({ ...e, group: S.groups.some(x => x.id === e.group) ? e.group : null }); dirty.add('exercises');
+  }
   sortAll();
   rev.n++;
-  if (added) write('exercises');
+  for (const k of dirty) write(k);
 }
 
 function sortAll() {
@@ -88,7 +102,7 @@ let activeTimer = 0;
 export function save(...keys) {
   if (keys.some(k => k !== 'active')) { sortAll(); requestPersist(); }
   // Only these keys feed the statistics, so only they invalidate the derived caches.
-  if (keys.some(k => k === 'exercises' || k === 'workouts' || k === 'measurements' || k === 'gyms')) rev.n++;
+  if (keys.some(k => k === 'exercises' || k === 'workouts' || k === 'measurements' || k === 'gyms' || k === 'groups')) rev.n++;
   for (const k of keys) {
     if (k === 'active') {
       clearTimeout(activeTimer);
@@ -168,9 +182,10 @@ export function toCSV(rowFn) {
   return lines.join('\n');
 }
 
-/** Colours a gym can be given. Checked for colour-blind separation on the dark card surface. */
-export const GYM_COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#0ca30c', '#9085e9', '#e66767'];
 export const gymById = id => (id ? S.gyms.find(g => g.id === id) || null : null);
+export const groupById = id => (id ? S.groups.find(g => g.id === id) || null : null);
+/** Colour of an exercise: its muscle group's colour at a gym shade level (0 = plain). Grey without a group. */
+export const exColor = (ex, level = 0) => shade(groupById(ex?.group)?.color, level);
 
 export const SET_TYPES = { n: 'Normal', w: 'Warm-up', d: 'Drop set', f: 'To failure' };
 export { parseDay };

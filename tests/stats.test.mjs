@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { S, rev, bwAt } from '../js/store.js';
-import { LIBRARY } from '../js/library.js';
+import { LIBRARY, DEFAULT_GROUPS } from '../js/library.js';
+import { PALETTE, shade } from '../js/colors.js';
 import * as st from '../js/stats.js';
 import { makeDemo } from '../js/demo.js';
 import { DAY } from '../js/util.js';
@@ -61,7 +62,7 @@ assert.deepEqual(live.get(0), ['rm', 'wt']);
 assert.equal(st.streakWeeks(now) >= 0, true);
 
 // ---- gyms: previous values and records are kept per gym ----
-S.gyms = [{ id: 'g1', name: 'One', color: '#3987e5' }, { id: 'g2', name: 'Two', color: '#d95926' }];
+S.gyms = [{ id: 'g1', name: 'One', shade: 0 }, { id: 'g2', name: 'Two', shade: 2 }];
 S.workouts[0].gymId = 'g1'; S.workouts[1].gymId = 'g2'; S.workouts[2].gymId = 'g1';
 S.workouts.push({ id: 'w4', name: 'D', gymId: 'g2', start: day(2), end: day(2) + 36e5, exercises: [{ exId: B, sets: [{ t: 'n', kg: 95, reps: 7.5 }] }] });
 rev.n++;
@@ -79,6 +80,16 @@ near(st.repBest(B, 'g2')[7].ext, 95); assert.equal(st.repBest(B, 'g2')[8].ext, 9
 // live PR at g1 compares with g1 only: 102.5 is a record there although g2 already has it
 assert.deepEqual(st.livePRs(S.exercises.find(e => e.id === B), [{ t: 'n', kg: 102.5, reps: 5, done: true }], 80, 'g1').get(0), ['rm', 'wt', 'vol']);
 assert.equal(st.livePRs(S.exercises.find(e => e.id === B), [{ t: 'n', kg: 102.5, reps: 5, done: true }], 80, 'g2').size, 0);
+// ---- muscle groups: sets per week ----
+S.groups = DEFAULT_GROUPS.map(g => ({ ...g }));
+assert.equal(S.exercises.find(e => e.id === B).group, 'chest'); assert.equal(S.exercises.find(e => e.id === 'lib-barbell-curl').group, 'arms');
+assert.equal(S.exercises.find(e => e.id === 'lib-clean').group, null);
+rev.n++;
+const gsw = st.groupSets(day(35), now, 'week');
+const sumBy = k => gsw.reduce((a, b) => a + (b.by[k] || 0), 0);
+assert.equal(sumBy('chest'), 2 + 2 + 1 + 1, 'bench working sets, warm-up left out'); assert.equal(sumBy('back'), 2); assert.equal(sumBy(''), 0);
+assert.equal(gsw.reduce((a, b) => a + b.total, 0), 8);
+assert.equal(shade('green', 0), PALETTE.green[2]); assert.equal(shade('green', 2), PALETTE.green[0]); assert.equal(shade('green', -2), PALETTE.green[4]); assert.equal(shade(undefined, 1).length, 7);
 S.gyms = [];
 
 // demo data sanity

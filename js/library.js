@@ -178,7 +178,16 @@ Walking|dist|other|cardio
 
 export const slug = name => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
+/** Muscle groups every install starts with. The user can rename, recolour, add and delete them. */
+export const DEFAULT_GROUPS = [
+  ['chest', 'Chest', 'green'], ['back', 'Back', 'orange'], ['shoulders', 'Shoulders', 'yellow'], ['arms', 'Arms', 'pink'],
+  ['quads', 'Quads', 'red'], ['hamstrings', 'Hamstrings', 'blue'], ['glutes', 'Glutes', 'magenta'], ['calves', 'Calves', 'violet'],
+  ['abs', 'Abs', 'teal'], ['cardio', 'Cardio', 'cyan'],
+].map(([id, name, color]) => ({ id, name, color }));
+/** Muscle tag of the list above -> group id. Full-body lifts start without a group. */
+export const toGroup = muscle => ({ biceps: 'arms', triceps: 'arms', forearms: 'arms', 'full body': null })[muscle] ?? (DEFAULT_GROUPS.some(g => g.id === muscle) ? muscle : null);
+
 export const LIBRARY = RAW.trim().split('\n').map(line => {
   const [name, type, equip, muscle] = line.split('|');
-  return { id: 'lib-' + slug(name), name, type, equip, muscle, notes: '', builtin: true };
+  return { id: 'lib-' + slug(name), name, type, equip, group: toGroup(muscle), notes: '', builtin: true };
 });

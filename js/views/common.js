@@ -1,12 +1,15 @@
 // Pieces shared by several screens.
 import { h, icon, num, signed } from '../util.js';
-import { S, save } from '../store.js';
+import { S, save, exColor } from '../store.js';
+import { shade } from '../colors.js';
 import { calc, setText, PR_LABEL, RANGES } from '../stats.js';
 import { segmented } from '../ui.js';
 import { mount, legend } from '../charts.js';
 
-/** Small colour dot for a gym (grey when there is none). */
-export const gymDot = g => h('i', { class: 'gym-dot', style: { background: g ? g.color : 'var(--tx3)' } });
+/** Dot for a gym. A gym has no colour of its own: it is a shade of `colorKey` (grey when no colour applies). */
+export const gymDot = (g, colorKey) => h('i', { class: 'gym-dot', style: { background: g ? shade(colorKey, g.shade) : 'var(--tx3)' } });
+/** Dot in the colour of an exercise's muscle group. */
+export const exDot = ex => h('i', { class: 'ex-dot', style: { background: exColor(ex) } });
 
 export const prChips = cats => (cats || []).map(c => h('span', { class: 'pr' }, icon('trophy', 13), PR_LABEL[c]));
 

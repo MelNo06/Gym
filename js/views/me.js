@@ -1,6 +1,7 @@
 // Me tab: measurements, backup, settings.
 import { h, icon, uid, num, fmtDate, dayKey, parseDay, parseNum, DAY } from '../util.js';
-import { S, save, exportData, importData, wipe, toCSV, storageInfo, gymById, GYM_COLORS, APP_VERSION } from '../store.js';
+import { S, save, exportData, importData, wipe, toCSV, storageInfo, gymById, APP_VERSION } from '../store.js';
+import { COLOR_KEYS, SHADES, shade, shadeName } from '../colors.js';
 import { trend, rangeFrom, csvRow } from '../stats.js';
 import { sheet, confirmBox, toast, field, refresh } from '../ui.js';
 import { xyChart, C } from '../charts.js';
@@ -79,23 +80,31 @@ function profileSheet() {
   ], { title: 'About you' });
 }
 
+// A stripe of three sample colours at one shade level, to show what "lighter" or "darker" does.
+const shadeStripe = level => `linear-gradient(90deg, ${shade('green', level)} 0 33.3%, ${shade('blue', level)} 33.3% 66.6%, ${shade('pink', level)} 66.6%)`;
+
 function gymSheet(g) {
   const isNew = !g;
-  let color = g?.color || GYM_COLORS.find(c => !S.gyms.some(x => x.color === c)) || GYM_COLORS[0];
+  let level = g ? g.shade || 0 : (SHADES.find(([v]) => !S.gyms.some(x => (x.shade || 0) === v)) || SHADES[0])[0];
   const nameIn = h('input', { type: 'text', value: g?.name || '', placeholder: 'Gym name', autocapitalize: 'words' });
-  const sw = h('div', { class: 'swatches' });
-  const paint = () => sw.replaceChildren(...GYM_COLORS.map(c => h('button', { class: 'swatch' + (c === color ? ' on' : ''), style: { background: c }, 'aria-label': 'Colour', 'aria-pressed': String(c === color), onclick: () => { color = c; paint(); } }, c === color ? icon('check', 16) : null)));
+  const opts = h('div', { class: 'shade-opts' }), clash = h('span', { class: 'field-hint' });
+  const paint = () => {
+    opts.replaceChildren(...[2, 1, 0, -1, -2].map(v => h('button', { class: 'shade-opt' + (v === level ? ' on' : ''), 'aria-pressed': String(v === level), onclick: () => { level = v; paint(); } },
+      h('i', { style: { background: shadeStripe(v) } }), h('span', null, shadeName(v)))));
+    const same = S.gyms.filter(x => x !== g && (x.shade || 0) === level).map(x => x.name);
+    clash.textContent = same.length ? `${same.join(' and ')} already ${same.length > 1 ? 'use' : 'uses'} this shade. Their lines would look the same in a graph.` : 'In a graph, each exercise is drawn in its muscle colour at this shade when it was done at this gym.';
+  };
   paint();
   const untagged = S.workouts.filter(w => !gymById(w.gymId)).length;
   const here = g ? S.workouts.filter(w => w.gymId === g.id).length : 0;
   sheet(close => [
     field('Name', nameIn),
-    h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Colour in graphs'), sw),
+    h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Shade in graphs'), opts, clash),
     h('button', {
       class: 'btn btn-primary', onclick: () => {
         const name = nameIn.value.trim();
         if (!name) { toast('Give the gym a name.'); nameIn.focus(); return; }
-        if (isNew) S.gyms.push({ id: 'g-' + uid(), name, color }); else Object.assign(g, { name, color });
+        if (isNew) S.gyms.push({ id: 'g-' + uid(), name, shade: level }); else Object.assign(g, { name, shade: level });
         save('gyms'); close(); refresh();
       },
     }, 'Save'),
@@ -118,6 +127,41 @@ function gymSheet(g) {
       },
     }, 'Delete gym'),
   ], { title: isNew ? 'Add gym' : 'Edit gym' });
+}
+
+function groupSheet(g) {
+  const isNew = !g;
+  let color = g?.color || COLOR_KEYS.find(c => !S.groups.some(x => x.color === c)) || COLOR_KEYS[0];
+  const nameIn = h('input', { type: 'text', value: g?.name || '', placeholder: 'e.g. Chest', autocapitalize: 'words' });
+  const sw = h('div', { class: 'swatches' }), clash = h('span', { class: 'field-hint' });
+  const paint = () => {
+    sw.replaceChildren(...COLOR_KEYS.map(c => h('button', { class: 'swatch' + (c === color ? ' on' : ''), style: { background: shade(c) }, 'aria-label': c, 'aria-pressed': String(c === color), onclick: () => { color = c; paint(); } }, c === color ? icon('check', 16) : null)));
+    const same = S.groups.filter(x => x !== g && x.color === color).map(x => x.name);
+    clash.textContent = same.length ? `${same.join(' and ')} already ${same.length > 1 ? 'have' : 'has'} this colour.` : '';
+  };
+  paint();
+  const n = g ? S.exercises.filter(e => e.group === g.id).length : 0;
+  sheet(close => [
+    field('Name', nameIn),
+    h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Colour'), sw, clash),
+    h('button', {
+      class: 'btn btn-primary', onclick: () => {
+        const name = nameIn.value.trim();
+        if (!name) { toast('Give the muscle group a name.'); nameIn.focus(); return; }
+        if (isNew) S.groups.push({ id: 'm-' + uid(), name, color }); else Object.assign(g, { name, color });
+        save('groups'); close(); refresh();
+      },
+    }, 'Save'),
+    isNew ? null : h('button', {
+      class: 'btn btn-ghost danger', onclick: async () => {
+        close();
+        if (!await confirmBox({ title: `Delete ${g.name}?`, text: n ? `Its ${n} exercise${n === 1 ? '' : 's'} are kept and no longer have a muscle group.` : null, ok: 'Delete muscle group', danger: true })) return;
+        S.groups.splice(S.groups.indexOf(g), 1);
+        for (const e of S.exercises) if (e.group === g.id) e.group = null;
+        save('groups', 'exercises'); refresh(); toast('Muscle group deleted');
+      },
+    }, 'Delete muscle group'),
+  ], { title: isNew ? 'Add muscle group' : 'Edit muscle group' });
 }
 
 async function shareFile(name, text, type) {
@@ -190,9 +234,18 @@ export function meTab(rerender) {
         ? h('div', { class: 'list flush' }, S.gyms.map(g => {
           const n = S.workouts.filter(w => w.gymId === g.id).length;
           return h('button', { class: 'list-row', onclick: () => gymSheet(g) }, gymDot(g),
-            h('span', { class: 'row-main' }, h('b', null, g.name), h('small', null, `${n} workout${n === 1 ? '' : 's'}`)), icon('right', 16));
+            h('span', { class: 'row-main' }, h('b', null, g.name), h('small', null, `${shadeName(g.shade)} shade, ${n} workout${n === 1 ? '' : 's'}`)), icon('right', 16));
         }))
         : h('p', { class: 'chart-note' }, 'Add the gyms you train at. You pick the gym when a workout starts. Graphs, previous values and records are then kept per gym, because the same machine can feel heavier or lighter somewhere else.')),
+
+    h('section', { class: 'card' },
+      h('div', { class: 'card-head' }, h('h3', null, 'Muscle groups'), h('button', { class: 'btn-pill ghost', onclick: () => groupSheet(null) }, icon('plus', 16), 'Add group')),
+      h('p', { class: 'chart-note' }, 'Each exercise belongs to one group and is drawn in its colour. Change the group of an exercise on its page (Exercises, tap it, then the pencil).'),
+      h('div', { class: 'list flush' }, S.groups.map(g => {
+        const n = S.exercises.filter(e => e.group === g.id && !e.archived).length;
+        return h('button', { class: 'list-row', onclick: () => groupSheet(g) }, h('i', { class: 'ex-dot big', style: { background: shade(g.color) } }),
+          h('span', { class: 'row-main' }, h('b', null, g.name), h('small', null, `${n} exercise${n === 1 ? '' : 's'}`)), icon('right', 16));
+      }))),
 
     h('section', { class: 'card' }, h('h3', null, 'Backup'),
       h('p', { class: 'chart-note' }, backupAge == null ? 'No backup exported yet.' : backupAge === 0 ? 'Last backup exported today.' : `Last backup exported ${backupAge} day${backupAge === 1 ? '' : 's'} ago.`,

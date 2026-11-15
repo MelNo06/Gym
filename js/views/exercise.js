@@ -1,7 +1,7 @@
 // Exercise detail: graphs, all-time records and session history for one lift.
 // Every graph draws one line per gym, in that gym's colour.
 import { h, icon, num, big, fmtDate, fmtClock, fmtDur, signed, DAY } from '../util.js';
-import { S, exById, TYPES, isBW, gymById } from '../store.js';
+import { S, exById, TYPES, isBW, gymById, groupById, exColor } from '../store.js';
 import { sessionsOf, sessionsAt, gymsOf, records, repBest, trend, rangeFrom, RANGE_TEXT, setText, extText, MAX_REPS } from '../stats.js';
 import { pushPage, segmented, empty, cap } from '../ui.js';
 import { xyChart, C } from '../charts.js';
@@ -22,12 +22,13 @@ export function openExercise(exId) {
     const keys = gymsOf(exId);
     if (gym !== undefined && !keys.includes(gym)) gym = undefined;
     const named = keys.length > 1 || (keys.length === 1 && keys[0] !== null);   // are gyms in play for this lift?
-    const info = k => { const g = gymById(k); return g ? { key: k, name: g.name, color: g.color } : { key: null, name: 'No gym', color: named ? C.mute : C.c1 }; };
+    // A line wears the exercise's muscle colour in the shade of its gym. Sessions without a gym are grey next to gym lines.
+    const info = k => { const g = gymById(k); return g ? { key: k, name: g.name, color: exColor(ex, g.shade) } : { key: null, name: 'No gym', color: named ? C.mute : exColor(ex) }; };
     const sess = sessionsAt(exId, gym);
     const ctx = { ex, named, groups: (gym === undefined ? keys : [gym]).map(info) };
     const chips = keys.length > 1 ? h('div', { class: 'chips' },
       h('button', { class: 'chip' + (gym === undefined ? ' on' : ''), onclick: () => { gym = undefined; page.render(); } }, 'All gyms'),
-      keys.map(k => h('button', { class: 'chip' + (gym === k ? ' on' : ''), onclick: () => { gym = k; page.render(); } }, gymDot(gymById(k)), info(k).name))) : null;
+      keys.map(k => h('button', { class: 'chip' + (gym === k ? ' on' : ''), onclick: () => { gym = k; page.render(); } }, gymDot(gymById(k), groupById(ex.group)?.color), info(k).name))) : null;
     const content = !sessionsOf(exId).length
       ? empty('No sets logged yet', 'Add this exercise to a workout. Its graphs and records show up here after the first session.')
       : tab === 'graphs' ? graphs(ctx, sess, () => page.render())
@@ -37,7 +38,7 @@ export function openExercise(exId) {
       title: ex.name,
       actions: h('button', { class: 'icon-btn', 'aria-label': 'Edit exercise', onclick: () => openExerciseForm(ex) }, icon('edit', 20)),
       body: [
-        h('div', { class: 'ex-meta' }, [TYPES[ex.type], ex.equip && cap(ex.equip), ex.muscle && cap(ex.muscle)].filter(Boolean).join(' · ')),
+        h('div', { class: 'ex-meta' }, [TYPES[ex.type], ex.equip && cap(ex.equip), groupById(ex.group)?.name].filter(Boolean).join(' · ')),
         ex.notes ? h('div', { class: 'ex-pinned' }, ex.notes) : null,
         segmented([['graphs', 'Graphs'], ['records', 'Records'], ['history', 'History']], tab, v => { tab = v; page.render(); }),
         chips,
@@ -56,7 +57,7 @@ function graphs({ ex, named, groups }, all, rerender) {
   const out = [rangeControl(rerender)];
   const base = { x0: from, x1: now };
   const title = s => fmtDate(s.t, { weekday: true, year: true });
-  const gymRow = (s, color) => (named ? [{ label: 'Gym', value: gymById(s.gym)?.name || 'No gym', color }] : []);
+  const gymRow = (s, color) => [{ label: 'Workout', value: s.w.name }, ...(named ? [{ label: 'Gym', value: gymById(s.gym)?.name || 'No gym', color }] : [])];
 
   /** One line per gym of a per-session number. A single line also gets a trend. */
   const lines = ({ name, get, fmt, axis, sub, unit, dp = 1, rows, note, zero = false, extra, legendExtra, height = 190, value, chip = true }) => {
@@ -66,7 +67,7 @@ function graphs({ ex, named, groups }, all, rerender) {
     const tr = gs.length === 1 ? trend(pts) : null, last = pts.at(-1);
     const more = extra ? extra(gs, pts) : {};
     const legendItems = [
-      ...(gs.length > 1 ? gs.map(g => ({ label: g.name, color: g.color })) : []),
+      ...(named ? gs.map(g => ({ label: g.name, color: g.color })) : []),      // always say which line is which gym
       ...(legendExtra ? legendExtra(gs, pts) : []),
     ];
     if (tr && legendItems.length) legendItems.push({ label: 'Trend', color: C.mute, kind: 'dash' });
@@ -134,7 +135,7 @@ function graphs({ ex, named, groups }, all, rerender) {
         series: [...(body ? [{ pts: pts.map(p => ({ x: p.x, y: p.s.bw })), color: C.mute, kind: 'line', dash: '2 5' }] : []), ...gs.map(g => ({ pts: g.pts, color: g.color }))],
       }),
       legendExtra: (gs, pts) => [
-        ...(gs.length === 1 ? [{ label: 'Estimate', color: gs[0].color }] : []),
+        ...(gs.length === 1 && !named ? [{ label: 'Estimate', color: gs[0].color }] : []),
         { label: 'Formula spread', color: gs.length === 1 ? gs[0].color : C.mute, kind: 'band' },
         ...(body ? [{ label: 'Body weight', color: C.mute, kind: 'dash' }] : []),
         ...(pts.some(p => [...p.s.prs.values()].some(c => c.includes('rm'))) ? [{ label: 'Record', color: C.gold, kind: 'dot' }] : []),
@@ -169,7 +170,7 @@ function repCurve(ex, groups, named) {
   return chartCard({
     title: 'Heaviest weight per rep count',
     sub: 'All time. The heaviest weight you have done for at least this many reps.',
-    legendItems: gs.length > 1 ? gs.map(g => ({ label: g.name, color: g.color })) : null,
+    legendItems: named ? gs.map(g => ({ label: g.name, color: g.color })) : null,
     height: 210,
     draw: (el, w, H) => xyChart(el, w, H, {
       x0: 1, x1: MAX_REPS, yFmt: v => num(v, 1), label: 'Heaviest weight per rep count',
@@ -229,7 +230,7 @@ function historyView({ ex, named }, sess, shown, more) {
   return [
     list.slice(0, shown).map(s => h('section', { class: 'card tap', onclick: () => openWorkout(s.w.id) },
       h('div', { class: 'card-head' }, h('b', null, fmtDate(s.t, { weekday: true, year: true })),
-        h('span', { class: 'muted gym-tag' }, named ? [gymDot(gymById(s.gym)), gymById(s.gym)?.name || 'No gym'] : s.w.name)),
+        h('span', { class: 'muted gym-tag' }, named ? [gymDot(gymById(s.gym), groupById(ex.group)?.color), gymById(s.gym)?.name || 'No gym'] : s.w.name)),
       s.w.exercises[s.ei].notes ? h('p', { class: 'note' }, s.w.exercises[s.ei].notes) : null,
       setTable(ex, s.w.exercises[s.ei].sets, s.bw, i => s.prs.get(i)))),
     list.length > shown ? h('button', { class: 'btn btn-soft', onclick: more }, `Show older sessions (${list.length - shown})`) : null,

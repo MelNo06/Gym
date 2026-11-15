@@ -1,10 +1,10 @@
 // Offline support. Bump VERSION (and APP_VERSION in js/store.js) with every change,
 // otherwise installed copies keep serving the old files.
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const CACHE = 'gym-' + VERSION;
 const ASSETS = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
-  'js/main.js', 'js/util.js', 'js/store.js', 'js/library.js', 'js/stats.js', 'js/charts.js', 'js/ui.js', 'js/demo.js',
+  'js/main.js', 'js/util.js', 'js/colors.js', 'js/store.js', 'js/library.js', 'js/stats.js', 'js/charts.js', 'js/ui.js', 'js/demo.js',
   'js/views/common.js', 'js/views/editor.js', 'js/views/picker.js', 'js/views/exercise.js',
   'js/views/history.js', 'js/views/workout.js', 'js/views/progress.js', 'js/views/me.js',
   'fonts/barlow-condensed-500.woff2', 'fonts/barlow-condensed-600.woff2', 'fonts/barlow-condensed-700.woff2',

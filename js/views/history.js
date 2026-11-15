@@ -1,6 +1,6 @@
 // History tab (calendar + list of workouts) and the read-only workout page.
-import { h, icon, uid, big, fmtDate, fmtTime, fmtDur, fmtClock, num, dayKey, weekStart, monthStart, MONTHS, MON } from '../util.js';
-import { S, save, exById, bwAt, gymById } from '../store.js';
+import { h, icon, uid, big, fmtDate, fmtTime, fmtDur, fmtClock, num, dayKey, weekStart, monthStart, MONTHS, MON, DAY } from '../util.js';
+import { S, save, exById, bwAt, gymById, exColor } from '../store.js';
 import { idx, workoutStats, summarize, setText, streakWeeks } from '../stats.js';
 import { pushPage, back, actionSheet, confirmBox, toast, segmented, empty } from '../ui.js';
 import { setTable, gymDot } from './common.js';
@@ -64,22 +64,24 @@ function monthGrid(first, days, mini) {
 export function historyTab(rerender) {
   const now = Date.now(), ws = S.workouts, days = byDay();
   const count = (a, b) => ws.filter(w => w.start >= a && w.start < b).length;
-  const cur = new Date(cursor), year = cur.getFullYear();
+  const cur = new Date(cursor), year = cur.getFullYear(), yearStart = new Date(new Date(now).getFullYear(), 0, 1).getTime();
   const shift = n => { const d = new Date(cursor); view === 'month' ? d.setMonth(d.getMonth() + n) : d.setFullYear(d.getFullYear() + n); cursor = d.getTime(); rerender(); };
   const atEnd = view === 'month' ? cursor >= monthStart(now) : year >= new Date(now).getFullYear();
 
+  // "12 workouts, 2.8 per week": the period only counts up to today.
+  const tally = (n, a, b) => `${n} workout${n === 1 ? '' : 's'}${n ? `, ${num(n / Math.max(1, (Math.min(b, now) - a) / (7 * DAY)), 1)} per week` : ''}`;
   let cal;
   if (view === 'month') {
     const next = new Date(year, cur.getMonth() + 1, 1).getTime(), n = count(cursor, next);
     cal = [
-      h('div', { class: 'cal-sub' }, `${n} workout${n === 1 ? '' : 's'}`),
+      h('div', { class: 'cal-sub' }, tally(n, cursor, next)),
       h('div', { class: 'cal-wd' }, ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(d => h('span', null, d))),
       monthGrid(cursor, days),
     ];
   } else {
     const n = count(new Date(year, 0, 1).getTime(), new Date(year + 1, 0, 1).getTime());
     cal = [
-      h('div', { class: 'cal-sub' }, `${n} workout${n === 1 ? '' : 's'}`),
+      h('div', { class: 'cal-sub' }, tally(n, new Date(year, 0, 1).getTime(), new Date(year + 1, 0, 1).getTime())),
       h('div', { class: 'year-grid' }, MON.map((name, m) => {
         const first = new Date(year, m, 1).getTime(), c = count(first, new Date(year, m + 1, 1).getTime());
         return h('button', { class: 'mini-month', 'aria-label': `${MONTHS[m]}, ${c} workouts`, onclick: () => { view = 'month'; cursor = first; rerender(); } },
@@ -106,7 +108,13 @@ export function historyTab(rerender) {
       h('button', { class: 'btn-pill ghost', onclick: () => editWorkout(null) }, icon('plus', 16), 'Log past workout')),
     h('div', { class: 'tiles tiles-4' },
       tile('This week', count(weekStart(now), Infinity)), tile('This month', count(monthStart(now), Infinity)),
-      tile('This year', count(new Date(new Date(now).getFullYear(), 0, 1).getTime(), Infinity)), tile('Week streak', streakWeeks(now))),
+      tile('This year', count(yearStart, Infinity)), tile('All time', ws.length)),
+    ws.length ? h('section', { class: 'card' }, h('h3', null, 'Average workouts per week'),
+      h('div', { class: 'totals' },
+        [['4 weeks', count(now - 28 * DAY, Infinity) / 4], ['12 weeks', count(now - 84 * DAY, Infinity) / 12],
+          ['This year', count(yearStart, Infinity) / Math.max(1, (now - yearStart) / (7 * DAY))]]
+          .map(([k, v]) => h('div', null, h('b', null, num(v, 1)), h('span', null, k))),
+        h('div', null, h('b', null, streakWeeks(now)), h('span', null, 'Week streak')))) : null,
     h('section', { class: 'card' },
       h('div', { class: 'cal-head' },
         h('button', { class: 'icon-btn', 'aria-label': 'Previous', onclick: () => shift(-1) }, icon('left', 20)),
@@ -152,7 +160,7 @@ export function openWorkout(id) {
         w.exercises.map((we, ei) => {
           const ex = exById(we.exId);
           if (!ex) return null;
-          return h('section', { class: 'card' },
+          return h('section', { class: 'card', style: { '--exc': exColor(ex) } },
             h('button', { class: 'ex-name', onclick: () => openExercise(ex.id) }, ex.name),
             we.notes ? h('p', { class: 'note' }, we.notes) : null,
             setTable(ex, we.sets, bw, i => prs?.get(ei + ':' + i)));

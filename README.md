@@ -4,10 +4,11 @@ A personal workout log that runs as a Home Screen web app on the iPhone. It work
 
 - **Workout:** log sets against your previous session, with set types, notes, routines and live record badges.
 - **History:** month and year calendar, every past workout, back-filling and editing.
-- **Progress:** workouts and volume per week, body weight, and a trend for every lift.
+- **Progress:** every logged exercise with its trend (tap for its graphs), and sets per week for each muscle group.
 - **Exercises:** about 170 built-in exercises plus your own, each with graphs, all-time records and session history.
 - **Me:** body weight, height, age, your gyms, backup and restore.
-- **Gyms:** every workout can be tagged with a gym. Graphs draw one line per gym, and previous values and records are kept per gym.
+- **Colours:** each exercise belongs to a muscle group with one of 12 fixed colours. Each gym has one of five shades. A graph line is the exercise's colour in the gym's shade (`js/colors.js`).
+- **Gyms:** every workout can be tagged with a gym. Previous values and records are kept per gym.
 
 ## Install on an iPhone
 

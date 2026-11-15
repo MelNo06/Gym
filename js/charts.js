@@ -182,16 +182,50 @@ export function barChart(el, w, H, o) {
   });
 }
 
+/**
+ * Bars stacked from several coloured parts. o = { bins:[{title, tick, parts:[{v, color, label}]}], yFmt, label }
+ * Parts are separated by a 2px gap so neighbouring colours never touch.
+ */
+export function stackedBar(el, w, H, o) {
+  const fmt = o.yFmt || (v => num(v, 0));
+  const totals = o.bins.map(b => b.parts.reduce((a, p) => a + p.v, 0));
+  const ticks = niceTicks(0, Math.max(1e-9, ...totals) * 1.05, 3), hi = ticks.at(-1), labels = ticks.map(fmt);
+  const { svg, ml, mr, mt, pw, ph } = frame(w, H, ticks, labels, o.label);
+  const Y = y => mt + (1 - y / hi) * ph, slot = pw / o.bins.length, bw = clamp(slot - 2, 1, 26);
+  ticks.forEach((t, i) => svg.append(
+    s('line', { x1: ml, x2: w - mr, y1: Y(t), y2: Y(t), class: 'grid' }),
+    s('text', { x: ml - 7, y: Y(t) + 3.5, class: 'tick', 'text-anchor': 'end' }, labels[i])));
+  let lastLabel = -99;
+  const cols = [];
+  o.bins.forEach((b, i) => {
+    const cx = ml + slot * (i + .5), g = s('g');
+    if (b.tick && cx - lastLabel > 44) { xLabel(svg, cx, H, w, b.tick); lastLabel = cx; }
+    let acc = 0;
+    for (const p of b.parts) {
+      if (!(p.v > 0)) continue;
+      const y1 = Y(acc), y0 = Y(acc + p.v), hgt = y1 - y0, gap = hgt > 4 ? 2 : 0;
+      g.append(s('rect', { x: cx - bw / 2, y: y0 + gap, width: bw, height: Math.max(1, hgt - gap), rx: Math.min(2, bw / 2), fill: p.color }));
+      acc += p.v;
+    }
+    svg.append(g); cols[i] = g;
+  });
+  el.append(svg);
+  scrub(el, svg, o.bins.map((b, i) => ({
+    px: ml + slot * (i + .5), i, title: b.title,
+    rows: [...b.parts.filter(p => p.v > 0).slice().reverse().map(p => ({ label: p.label, value: fmt(p.v), color: p.color })), { label: 'Total', value: fmt(totals[i]) }],
+  })), { top: mt, bottom: mt + ph, w, onShow: it => cols.forEach((g, i) => g.setAttribute('opacity', !it || it.i === i ? 1 : .45)) });
+}
+
 /** Tiny trend line for list rows. */
-export function spark(pts, w = 66, H = 26) {
+export function spark(pts, w = 66, H = 26, color = C.c1) {
   const svg = s('svg', { width: w, height: H, viewBox: `0 0 ${w} ${H}`, class: 'spark', 'aria-hidden': 'true' });
   if (pts.length < 2) return svg;
   const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
   const x0 = Math.min(...xs), x1 = Math.max(...xs), lo = Math.min(...ys), hi = Math.max(...ys);
   const X = x => 3 + (x1 > x0 ? (x - x0) / (x1 - x0) : .5) * (w - 6), Y = y => 3 + (hi > lo ? 1 - (y - lo) / (hi - lo) : .5) * (H - 6);
   svg.append(
-    s('path', { d: 'M' + pts.map(p => `${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join('L'), fill: 'none', stroke: C.c1, 'stroke-width': 1.75, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }),
-    s('circle', { cx: X(pts.at(-1).x), cy: Y(pts.at(-1).y), r: 2.5, fill: C.c1 }));
+    s('path', { d: 'M' + pts.map(p => `${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join('L'), fill: 'none', stroke: color, 'stroke-width': 1.75, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }),
+    s('circle', { cx: X(pts.at(-1).x), cy: Y(pts.at(-1).y), r: 2.5, fill: color }));
   return svg;
 }
 

@@ -1,5 +1,5 @@
 // Everything derived from the raw log: loads, estimated 1RM, records, PRs, trends, bins.
-import { S, rev, exById, bwAt, gymById } from './store.js';
+import { S, rev, exById, bwAt, gymById, groupById } from './store.js';
 import { DAY, num, fmtClock, weekStart, monthStart } from './util.js';
 
 // ---- estimated one-rep max ----
@@ -247,6 +247,31 @@ export function bins(from, to, unit) {
     if (!b) continue;
     const st = workoutStats(w);
     b.n++; b.vol += st.vol; b.sec += st.dur;
+  }
+  return out;
+}
+
+/**
+ * Working sets per muscle group in weekly or monthly bins. `by` maps group id ('' = no group) to a set count,
+ * `weeks` is how many weeks of the bin have passed, so count / weeks is the weekly average of a month.
+ */
+export function groupSets(from, to, unit) {
+  const start = unit === 'week' ? weekStart : monthStart;
+  const next = x => { const d = new Date(x); unit === 'week' ? d.setDate(d.getDate() + 7) : d.setMonth(d.getMonth() + 1); return d.getTime(); };
+  const out = [], at = new Map();
+  for (let x = start(from); x <= to; x = next(x)) {
+    const b = { x, weeks: Math.max(1, (Math.min(next(x), to) - x) / (7 * DAY)), by: {}, total: 0 };
+    at.set(x, b); out.push(b);
+  }
+  for (const w of S.workouts) {
+    const b = at.get(start(w.start));
+    if (!b) continue;
+    for (const we of w.exercises) {
+      const ex = exById(we.exId), n = ex ? we.sets.filter(s => s.t !== 'w').length : 0;
+      if (!n) continue;
+      const k = groupById(ex.group) ? ex.group : '';
+      b.by[k] = (b.by[k] || 0) + n; b.total += n;
+    }
   }
   return out;
 }

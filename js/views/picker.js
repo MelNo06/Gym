@@ -1,6 +1,8 @@
 // Exercise picker (used while logging) and the create / edit exercise form.
 import { h, icon, uid } from '../util.js';
-import { S, save, TYPES, EQUIP, MUSCLES } from '../store.js';
+import { S, save, TYPES, EQUIP, groupById } from '../store.js';
+import { shade } from '../colors.js';
+import { exDot } from './common.js';
 import { sessionsOf } from '../stats.js';
 import { pushPage, back, toast, confirmBox, field, select, chip, cap } from '../ui.js';
 
@@ -9,13 +11,17 @@ export function matches(ex, q) {
   const name = ex.name.toLowerCase();
   return q.toLowerCase().split(/\s+/).filter(Boolean).every(t => name.includes(t));
 }
-export const exSub = ex => [ex.muscle && cap(ex.muscle), ex.equip && cap(ex.equip)].filter(Boolean).join(', ');
+export const exSub = ex => [groupById(ex.group)?.name, ex.equip && cap(ex.equip)].filter(Boolean).join(', ');
+/** Does an exercise pass the group filter? '' = all, '-' = exercises without a group. */
+export const inGroup = (ex, f) => !f || (f === '-' ? !groupById(ex.group) : ex.group === f);
 
 /** Chips for filtering by muscle group. */
 export function muscleChips(current, onChange) {
-  const used = new Set(visibleExercises().map(e => e.muscle).filter(Boolean));
+  const all = visibleExercises(), used = new Set(all.map(e => e.group));
   return h('div', { class: 'chips' }, chip('All', !current, () => onChange('')),
-    MUSCLES.filter(m => used.has(m)).map(m => chip(cap(m), current === m, () => onChange(m))));
+    S.groups.filter(g => used.has(g.id)).map(g => h('button', { class: 'chip' + (current === g.id ? ' on' : ''), onclick: () => onChange(g.id) },
+      h('i', { class: 'ex-dot', style: { background: shade(g.color) } }), g.name)),
+    all.some(e => !groupById(e.group)) ? chip('No group', current === '-', () => onChange('-')) : null);
 }
 
 export function openPicker({ multi, onPick }) {
@@ -32,11 +38,12 @@ export function openPicker({ multi, onPick }) {
         paint();
       },
     },
+      exDot(ex),
       h('span', { class: 'row-main' }, h('b', null, ex.name), h('small', null, exSub(ex) + (n ? ` · ${n} session${n > 1 ? 's' : ''}` : ''))),
       multi ? h('span', { class: 'pick' + (on ? ' on' : '') }, on ? icon('check', 16) : null) : null);
   };
   function paint() {
-    const all = visibleExercises().filter(e => (!muscle || e.muscle === muscle) && matches(e, q));
+    const all = visibleExercises().filter(e => inGroup(e, muscle) && matches(e, q));
     const kids = [];
     if (q.trim()) kids.push(h('button', { class: 'list-row create', onclick: () => openExerciseForm(null, { name: q.trim(), onSaved: ex => { if (multi) { chosen.push(ex.id); q = ''; page.render(); } else done([ex.id]); } }) },
       icon('plus', 18), h('span', { class: 'row-main' }, h('b', null, `Create “${q.trim()}”`), h('small', null, 'New exercise'))));
@@ -78,7 +85,7 @@ const TYPE_HELP = {
 
 export function openExerciseForm(ex, { name = '', onSaved } = {}) {
   const isNew = !ex, used = !!ex && sessionsOf(ex.id).length > 0;
-  const d = ex ? { ...ex } : { id: 'x-' + uid(), name, type: 'weight', equip: 'barbell', muscle: '', notes: '', builtin: false };
+  const d = ex ? { ...ex } : { id: 'x-' + uid(), name, type: 'weight', equip: 'barbell', group: null, notes: '', builtin: false };
   const page = pushPage(() => {
     const help = h('span', { class: 'field-hint' }, used ? 'The type cannot change once sets are logged.' : TYPE_HELP[d.type]);
     const nameIn = h('input', { type: 'text', value: d.name, placeholder: 'e.g. Pull-Up (wide grip)', autocapitalize: 'words', oninput: e => { d.name = e.target.value; } });
@@ -118,7 +125,7 @@ export function openExerciseForm(ex, { name = '', onSaved } = {}) {
         h('label', { class: 'field' }, h('span', { class: 'field-label' }, 'How it is logged'), typeSel, help),
         h('div', { class: 'grid-2' },
           field('Equipment', select(EQUIP.map(e => [e, cap(e)]), d.equip || 'other', { onchange: e => { d.equip = e.target.value; } })),
-          field('Muscle group', select([['', 'None'], ...MUSCLES.map(m => [m, cap(m)])], d.muscle || '', { onchange: e => { d.muscle = e.target.value; } }))),
+          field('Muscle group', select([['', 'None'], ...S.groups.map(g => [g.id, g.name])], groupById(d.group) ? d.group : '', { onchange: e => { d.group = e.target.value || null; } }))),
         field('Notes', h('textarea', { rows: 3, value: d.notes || '', placeholder: 'Machine settings, grip width, cues…', oninput: e => { d.notes = e.target.value; } }),
           'Shown on the card every time you log this exercise.'),
         isNew ? null : h('button', { class: 'btn btn-ghost danger', onclick: remove }, 'Delete exercise')),
