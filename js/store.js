@@ -3,7 +3,7 @@ import { LIBRARY, DEFAULT_GROUPS, toGroup } from './library.js';
 import { shade } from './colors.js';
 import { dayKey, parseDay } from './util.js';
 
-export const APP_VERSION = '1.2.1';
+export const APP_VERSION = '1.2.2';
 const DB = 'gym', STORE = 'kv', SCHEMA = 2;
 const KEYS = ['exercises', 'workouts', 'routines', 'measurements', 'gyms', 'groups', 'profile', 'settings', 'active', 'meta'];
 
@@ -184,6 +184,8 @@ export function toCSV(rowFn) {
 
 export const gymById = id => (id ? S.gyms.find(g => g.id === id) || null : null);
 export const groupById = id => (id ? S.groups.find(g => g.id === id) || null : null);
+/** Is this a cardio exercise? Decided by its muscle group: the built-in Cardio group, or any group named like it. */
+export const isCardio = ex => { const g = groupById(ex?.group); return !!g && (g.id === 'cardio' || /cardio/i.test(g.name)); };
 /** Colour of an exercise: its muscle group's colour at a gym shade level (0 = plain). Grey without a group. */
 export const exColor = (ex, level = 0) => shade(groupById(ex?.group)?.color, level);
 

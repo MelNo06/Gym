@@ -227,8 +227,9 @@ h3 > .ex-dot { margin-right: 8px; }
 .cell-in { height: 36px; min-height: 0; padding: 0 2px; text-align: center; font-weight: 600; border-radius: 9px; border-color: transparent; font-variant-numeric: tabular-nums; }
 .cell-in::placeholder { font-weight: 400; }
 .set-check { height: 36px; border-radius: 9px; background: var(--s2); color: var(--tx3); display: grid; place-items: center; }
-.set-row.done { background: var(--ok-soft); }
-.set-row.done .set-check { background: var(--ok); color: #fff; }
+/* A ticked set lights up in the colour of the exercise's muscle group (green when it has none). */
+.set-row.done { background: color-mix(in srgb, var(--exc, var(--ok)) 18%, transparent); }
+.set-row.done .set-check { background: var(--exc, var(--ok)); color: #0d1117; }
 .set-row.done .cell-in, .set-row.done .set-no { background: transparent; }
 .pr-line { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 0 6px 50px; }
 .pr { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--gold); background: rgba(232, 176, 74, .13); padding: 2px 7px; border-radius: 7px; white-space: nowrap; }

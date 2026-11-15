@@ -94,10 +94,18 @@ function graphs({ ex, named, groups }, all, rerender) {
       lines({ name: 'Longest set', get: s => s.maxSec || null, fmt: fmtClock, axis: fmtClock, unit: 'time' }),
       lines({ name: 'Total time per session', get: s => s.sec || null, fmt: fmtClock, axis: fmtClock, unit: 'time', zero: true }));
   } else if (ex.type === 'dist') {
+    // Cardio: how far, how long, and how fast. Touching any of the three shows all four numbers of that session.
+    const kmh = s => (s.km > 0 && s.sec > 0 ? s.km / (s.sec / 3600) : null);
+    const rows = (s, color) => [
+      { label: 'Distance', value: `${num(s.km, 2)} km`, color },
+      ...(s.sec ? [{ label: 'Time', value: fmtClock(s.sec) }] : []),
+      ...(s.pace ? [{ label: 'Pace', value: `${fmtClock(s.pace)} / km` }, { label: 'Speed', value: `${num(kmh(s), 1)} km/h` }] : []),
+    ];
     out.push(
-      lines({ name: 'Distance per session', get: s => s.km || null, fmt: v => `${num(v, 2)} km`, unit: 'km', dp: 2, zero: true }),
-      lines({ name: 'Pace', get: s => s.pace, fmt: v => `${fmtClock(v)} / km`, axis: fmtClock, unit: 'time', sub: 'Lower is faster', chip: false }),
-      lines({ name: 'Time per session', get: s => s.sec || null, fmt: fmtClock, axis: fmtClock, unit: 'time', zero: true }));
+      lines({ name: 'Distance per session', get: s => s.km || null, fmt: v => `${num(v, 2)} km`, unit: 'km', dp: 2, zero: true, rows }),
+      lines({ name: 'Time per session', get: s => s.sec || null, fmt: fmtClock, axis: fmtClock, unit: 'time', zero: true, rows }),
+      lines({ name: 'Pace', get: s => s.pace, fmt: v => `${fmtClock(v)} / km`, axis: fmtClock, unit: 'time', chip: false, rows,
+        sub: s => `${num(kmh(s), 1)} km/h. A lower line means you were faster.` }));
   } else if (ex.type === 'bw') {
     out.push(
       lines({ name: 'Most reps in a set', get: s => s.maxReps || null, fmt: v => `${num(v)} reps`, axis: v => num(v, 0), unit: 'reps' }),

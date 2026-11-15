@@ -277,8 +277,8 @@ export function groupSets(from, to, unit) {
 }
 
 /** Consecutive weeks with at least one workout, counting back from this week (or last week if this one is still empty). */
-export function streakWeeks(now = Date.now()) {
-  const weeks = new Set(S.workouts.map(w => weekStart(w.start)));
+export function streakWeeks(now = Date.now(), list = S.workouts) {
+  const weeks = new Set(list.map(w => weekStart(w.start)));
   let cur = weekStart(now), n = 0;
   if (!weeks.has(cur)) cur = weekStart(cur - DAY);
   while (weeks.has(cur)) { n++; cur = weekStart(cur - DAY); }

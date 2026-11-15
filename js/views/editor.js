@@ -3,7 +3,7 @@
 //   edit    - changing or back-filling a saved workout
 //   routine - building a routine (no tick column, values are targets)
 import { h, icon, uid, num, parseNum, fmtClock, big, dayKey, parseDay, pad } from '../util.js';
-import { S, save, flush, exById, bwAt, isBW, gymById, exColor, SET_TYPES } from '../store.js';
+import { S, save, flush, exById, bwAt, isBW, gymById, groupById, exColor, SET_TYPES } from '../store.js';
 import { livePRs, liveStats, prevSets, setShort, PR_LABEL } from '../stats.js';
 import { pushPage, back, sheet, actionSheet, confirmBox, toast, refresh, field, topPage } from '../ui.js';
 import { gymDot } from './common.js';
@@ -199,7 +199,7 @@ export function openEditor(draft, mode, opts = {}) {
     const found = routine ? null : prevSets(ex.id, draft.start, draft.id, draft.gymId);
     const prev = found ? found.sets : null;
     const rowsEl = h('div', { class: 'set-rows' });
-    const el = h('section', { class: 'ex-card' + (routine ? ' no-check' : ''), style: { '--n': FIELDS[ex.type].length, '--exc': exColor(ex) } },
+    const el = h('section', { class: 'ex-card' + (routine ? ' no-check' : ''), style: { '--n': FIELDS[ex.type].length, '--exc': groupById(ex.group) ? exColor(ex) : null } },
       h('div', { class: 'ex-head' },
         h('button', { class: 'grip', 'aria-label': 'Drag to reorder', onpointerdown: e => startDrag(e, el) }, icon('grip', 20)),
         h('button', { class: 'ex-name', onclick: () => openExercise(ex.id) }, ex.name),

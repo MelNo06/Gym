@@ -1,6 +1,6 @@
 // History tab (calendar + list of workouts) and the read-only workout page.
 import { h, icon, uid, big, fmtDate, fmtTime, fmtDur, fmtClock, num, dayKey, weekStart, monthStart, MONTHS, MON, DAY } from '../util.js';
-import { S, save, exById, bwAt, gymById, exColor } from '../store.js';
+import { S, save, exById, bwAt, gymById, exColor, isCardio } from '../store.js';
 import { idx, workoutStats, summarize, setText, streakWeeks } from '../stats.js';
 import { pushPage, back, actionSheet, confirmBox, toast, segmented, empty } from '../ui.js';
 import { setTable, gymDot } from './common.js';
@@ -61,6 +61,22 @@ function monthGrid(first, days, mini) {
   return h('div', { class: mini ? 'cal mini' : 'cal' }, cells);
 }
 
+/** A workout is a gym session if it has any strength exercise, and a cardio session if it has any cardio exercise. */
+function kinds(w) {
+  const k = { gym: false, cardio: false };
+  for (const we of w.exercises) { const ex = exById(we.exId); if (ex) k[isCardio(ex) ? 'cardio' : 'gym'] = true; }
+  return k;
+}
+/** Averages per week over three periods, plus the run of consecutive weeks, for one kind of session. */
+function avgCard(title, list, now, yearStart) {
+  const n = from => list.filter(w => w.start >= from).length;
+  return h('section', { class: 'card' }, h('h3', null, title),
+    h('div', { class: 'totals' },
+      [['4 weeks', n(now - 28 * DAY) / 4], ['12 weeks', n(now - 84 * DAY) / 12], ['This year', n(yearStart) / Math.max(1, (now - yearStart) / (7 * DAY))]]
+        .map(([k, v]) => h('div', null, h('b', null, num(v, 1)), h('span', null, k))),
+      h('div', null, h('b', null, streakWeeks(now, list)), h('span', null, 'Week streak'))));
+}
+
 export function historyTab(rerender) {
   const now = Date.now(), ws = S.workouts, days = byDay();
   const count = (a, b) => ws.filter(w => w.start >= a && w.start < b).length;
@@ -109,12 +125,8 @@ export function historyTab(rerender) {
     h('div', { class: 'tiles tiles-4' },
       tile('This week', count(weekStart(now), Infinity)), tile('This month', count(monthStart(now), Infinity)),
       tile('This year', count(yearStart, Infinity)), tile('All time', ws.length)),
-    ws.length ? h('section', { class: 'card' }, h('h3', null, 'Average workouts per week'),
-      h('div', { class: 'totals' },
-        [['4 weeks', count(now - 28 * DAY, Infinity) / 4], ['12 weeks', count(now - 84 * DAY, Infinity) / 12],
-          ['This year', count(yearStart, Infinity) / Math.max(1, (now - yearStart) / (7 * DAY))]]
-          .map(([k, v]) => h('div', null, h('b', null, num(v, 1)), h('span', null, k))),
-        h('div', null, h('b', null, streakWeeks(now)), h('span', null, 'Week streak')))) : null,
+    ws.length ? avgCard('Gym sessions per week', ws.filter(w => kinds(w).gym), now, yearStart) : null,
+    ws.length ? avgCard('Cardio sessions per week', ws.filter(w => kinds(w).cardio), now, yearStart) : null,
     h('section', { class: 'card' },
       h('div', { class: 'cal-head' },
         h('button', { class: 'icon-btn', 'aria-label': 'Previous', onclick: () => shift(-1) }, icon('left', 20)),
