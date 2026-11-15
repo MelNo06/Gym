@@ -1,9 +1,9 @@
 // History tab (calendar + list of workouts) and the read-only workout page.
 import { h, icon, uid, big, fmtDate, fmtTime, fmtDur, fmtClock, num, dayKey, weekStart, monthStart, MONTHS, MON } from '../util.js';
-import { S, save, exById, bwAt } from '../store.js';
+import { S, save, exById, bwAt, gymById } from '../store.js';
 import { idx, workoutStats, summarize, setText, streakWeeks } from '../stats.js';
 import { pushPage, back, actionSheet, confirmBox, toast, segmented, empty } from '../ui.js';
-import { setTable } from './common.js';
+import { setTable, gymDot } from './common.js';
 import { tile, editWorkout, startWorkout } from './editor.js';
 import { openExercise } from './exercise.js';
 
@@ -22,8 +22,10 @@ function bestText(ex, sm) {
 }
 const statLine = w => {
   const st = workoutStats(w);
+  const g = gymById(w.gymId);
   return h('div', { class: 'stat-line' },
-    h('span', null, fmtDur(st.dur)), h('span', null, `${big(st.vol)} kg`), h('span', null, `${st.sets} sets`),
+    g ? h('span', { class: 'gym-tag' }, gymDot(g), g.name) : null,
+    h('span', null, fmtDur(st.dur)), h('span', null, `${big(st.vol)} kg`), h('span', null, `${st.sets} set${st.sets === 1 ? '' : 's'}`),
     st.prs ? h('span', { class: 'pr' }, icon('trophy', 13), `${st.prs} record${st.prs > 1 ? 's' : ''}`) : null);
 };
 
@@ -144,7 +146,7 @@ export function openWorkout(id) {
       actions: h('button', { class: 'icon-btn', 'aria-label': 'Workout options', onclick: menu }, icon('more')),
       body: [
         h('h1', { class: 'page-h1' }, w.name),
-        h('div', { class: 'muted' }, `${fmtTime(w.start)}–${fmtTime(w.end)}${bw ? ` · body weight ${num(bw, 1)} kg` : ''}`),
+        h('div', { class: 'muted gym-tag' }, gymById(w.gymId) ? [gymDot(gymById(w.gymId)), gymById(w.gymId).name + ' ·'] : null, `${fmtTime(w.start)}–${fmtTime(w.end)}${bw ? ` · body weight ${num(bw, 1)} kg` : ''}`),
         h('div', { class: 'tiles tiles-4' }, tile('Duration', fmtDur(st.dur)), tile('Volume', big(st.vol) + ' kg'), tile('Sets', st.sets), tile('Records', st.prs, st.prs ? 'gold' : '')),
         w.notes ? h('p', { class: 'note' }, w.notes) : null,
         w.exercises.map((we, ei) => {

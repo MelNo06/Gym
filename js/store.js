@@ -2,9 +2,9 @@
 import { LIBRARY } from './library.js';
 import { dayKey, parseDay } from './util.js';
 
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.1.0';
 const DB = 'gym', STORE = 'kv', SCHEMA = 1;
-const KEYS = ['exercises', 'workouts', 'routines', 'measurements', 'profile', 'settings', 'active', 'meta'];
+const KEYS = ['exercises', 'workouts', 'routines', 'measurements', 'gyms', 'profile', 'settings', 'active', 'meta'];
 
 export const TYPES = {
   weight: 'Weight × reps',
@@ -20,7 +20,7 @@ export const isBW = ex => ex.type === 'wbw' || ex.type === 'abw' || ex.type === 
 export const hasReps = ex => ex.type !== 'time' && ex.type !== 'dist';
 
 const blank = () => ({
-  exercises: [], workouts: [], routines: [], measurements: [],
+  exercises: [], workouts: [], routines: [], measurements: [], gyms: [],
   profile: {}, settings: { range: '3M' }, active: null, meta: {},
 });
 export const S = blank();
@@ -88,7 +88,7 @@ let activeTimer = 0;
 export function save(...keys) {
   if (keys.some(k => k !== 'active')) { sortAll(); requestPersist(); }
   // Only these keys feed the statistics, so only they invalidate the derived caches.
-  if (keys.some(k => k === 'exercises' || k === 'workouts' || k === 'measurements')) rev.n++;
+  if (keys.some(k => k === 'exercises' || k === 'workouts' || k === 'measurements' || k === 'gyms')) rev.n++;
   for (const k of keys) {
     if (k === 'active') {
       clearTimeout(activeTimer);
@@ -156,7 +156,7 @@ export function wipe() {
 
 /** One row per logged set, for analysis in Python or a spreadsheet. */
 export function toCSV(rowFn) {
-  const head = ['date', 'start_time', 'workout', 'exercise', 'type', 'set_no', 'set_type', 'kg', 'reps', 'seconds', 'km',
+  const head = ['date', 'start_time', 'workout', 'gym', 'exercise', 'type', 'set_no', 'set_type', 'kg', 'reps', 'seconds', 'km',
     'bodyweight_kg', 'load_kg', 'e1rm_epley_kg', 'e1rm_brzycki_kg'];
   const q = v => (v == null ? '' : /[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v));
   const lines = [head.join(',')];
@@ -167,6 +167,10 @@ export function toCSV(rowFn) {
   }
   return lines.join('\n');
 }
+
+/** Colours a gym can be given. Checked for colour-blind separation on the dark card surface. */
+export const GYM_COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#0ca30c', '#9085e9', '#e66767'];
+export const gymById = id => (id ? S.gyms.find(g => g.id === id) || null : null);
 
 export const SET_TYPES = { n: 'Normal', w: 'Warm-up', d: 'Drop set', f: 'To failure' };
 export { parseDay };

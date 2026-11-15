@@ -3,18 +3,19 @@
 //   edit    - changing or back-filling a saved workout
 //   routine - building a routine (no tick column, values are targets)
 import { h, icon, uid, num, parseNum, fmtClock, big, dayKey, parseDay, pad } from '../util.js';
-import { S, save, flush, exById, bwAt, isBW, SET_TYPES } from '../store.js';
+import { S, save, flush, exById, bwAt, isBW, gymById, SET_TYPES } from '../store.js';
 import { livePRs, liveStats, prevSets, setShort, PR_LABEL } from '../stats.js';
 import { pushPage, back, sheet, actionSheet, confirmBox, toast, refresh, field, topPage } from '../ui.js';
+import { gymDot } from './common.js';
 import { openPicker } from './picker.js';
 import { openExercise } from './exercise.js';
 import { openWorkout } from './history.js';
 
 const FIELDS = {
-  weight: [['kg', 'kg', 'decimal'], ['reps', 'Reps', 'numeric']],
-  wbw: [['kg', '+ kg', 'decimal'], ['reps', 'Reps', 'numeric']],
-  abw: [['kg', '− kg', 'decimal'], ['reps', 'Reps', 'numeric']],
-  bw: [['reps', 'Reps', 'numeric']],
+  weight: [['kg', 'kg', 'decimal'], ['reps', 'Reps', 'decimal']],
+  wbw: [['kg', '+ kg', 'decimal'], ['reps', 'Reps', 'decimal']],
+  abw: [['kg', '− kg', 'decimal'], ['reps', 'Reps', 'decimal']],
+  bw: [['reps', 'Reps', 'decimal']],
   time: [['min', 'Min', 'numeric'], ['s', 'Sec', 'numeric']],
   dist: [['km', 'km', 'decimal'], ['min', 'Min', 'decimal']],
 };
@@ -29,11 +30,11 @@ function readRow(ex, set, rowEl) {
   else if (ex.type === 'dist') { set.km = v.km == null ? null : Math.abs(v.km); set.sec = v.min == null ? null : Math.round(Math.abs(v.min) * 60); }
   else {
     if ('kg' in v) set.kg = v.kg == null ? null : Math.abs(v.kg);
-    set.reps = v.reps == null ? null : Math.round(Math.abs(v.reps));
+    set.reps = v.reps == null ? null : +Math.abs(v.reps).toFixed(2);   // half reps such as 7.5 are allowed
   }
 }
 const valid = (ex, set) =>
-  ex.type === 'time' ? set.sec > 0 : ex.type === 'dist' ? set.km > 0 : set.reps >= 1 && (ex.type !== 'weight' || set.kg != null);
+  ex.type === 'time' ? set.sec > 0 : ex.type === 'dist' ? set.km > 0 : set.reps > 0 && (ex.type !== 'weight' || set.kg != null);
 const hasValue = s => s.reps != null || s.sec != null || s.km != null || s.kg != null;
 const clean = s => {
   const o = { t: s.t || 'n' };
@@ -47,14 +48,31 @@ export const defaultName = (ms = Date.now()) => {
 
 let activePage = null;
 
+/** Ask which gym. Resolves to a gym id, null for "no gym", or undefined when the sheet is dismissed. */
+export function chooseGym(current, title = 'Which gym are you in?') {
+  return new Promise(res => {
+    let picked;
+    const row = (g, id) => h('button', { class: 'action row' + (current === id ? ' on' : ''), onclick: () => { picked = id; close(); } }, gymDot(g), h('span', null, g ? g.name : 'No gym'));
+    const close = sheet(() => [...S.gyms.map(g => row(g, g.id)), row(null, null)], { title, onClose: () => res(picked) });
+  });
+}
+
 /** Start a workout, optionally from a routine or an earlier workout ({name, exercises, id}). */
 export async function startWorkout(from) {
   if (S.active) {
     const ok = await confirmBox({ title: 'A workout is already running', text: 'Starting a new one discards the workout in progress.', ok: 'Discard and start new', cancel: 'Keep current workout', danger: true });
     if (!ok) return;
   }
+  // With several gyms, ask where this workout happens. With one, use it.
+  let gymId = null;
+  if (S.gyms.length === 1) gymId = S.gyms[0].id;
+  else if (S.gyms.length > 1) {
+    gymId = await chooseGym(gymById(S.settings.lastGym)?.id);
+    if (gymId === undefined) return;
+    S.settings.lastGym = gymId; save('settings');
+  }
   S.active = {
-    id: uid(), name: from ? from.name : defaultName(), start: Date.now(), notes: '', routineId: from?.routineId || null,
+    id: uid(), name: from ? from.name : defaultName(), start: Date.now(), notes: '', routineId: from?.routineId || null, gymId,
     exercises: from ? from.exercises.filter(we => exById(we.exId)).map(we => ({
       exId: we.exId, notes: '', sets: (we.sets.length ? we.sets : [{ t: 'n' }]).map(s => ({ t: s.t || 'n', done: false, h: clean(s) })),
     })) : [],
@@ -151,7 +169,7 @@ export function openEditor(draft, mode, opts = {}) {
 
   function paintPRs(cardEl, we, ex) {
     cardEl.querySelectorAll('.pr-line').forEach(n => n.remove());
-    for (const [i, cats] of livePRs(ex, we.sets, bw)) {
+    for (const [i, cats] of livePRs(ex, we.sets, bw, draft.gymId)) {
       const rowEl = cardEl.querySelector(`.set-row[data-i="${i}"]`);
       rowEl?.after(h('div', { class: 'pr-line' }, cats.map(c => h('span', { class: 'pr' }, icon('trophy', 13), PR_LABEL[c] + ' record'))));
     }
@@ -172,26 +190,72 @@ export function openEditor(draft, mode, opts = {}) {
   // ---- one exercise card ----
   function card(we, ei) {
     const ex = exById(we.exId);
-    if (!ex) return h('section', { class: 'ex-card' }, h('div', { class: 'ex-head' }, h('span', { class: 'muted' }, 'Deleted exercise'),
-      h('button', { class: 'btn-text danger', onclick: () => { draft.exercises.splice(ei, 1); touch(); page.render(); } }, 'Remove')));
-    const prev = routine ? null : prevSets(ex.id, draft.start, draft.id);
+    if (!ex) {
+      const gone = h('section', { class: 'ex-card' }, h('div', { class: 'ex-head' }, h('span', { class: 'muted' }, 'Deleted exercise'),
+        h('button', { class: 'btn-text danger', onclick: () => { draft.exercises.splice(ei, 1); touch(); page.render(); } }, 'Remove')));
+      gone._we = we;
+      return gone;
+    }
+    const found = routine ? null : prevSets(ex.id, draft.start, draft.id, draft.gymId);
+    const prev = found ? found.sets : null;
     const rowsEl = h('div', { class: 'set-rows' });
     const el = h('section', { class: 'ex-card' + (routine ? ' no-check' : ''), style: { '--n': FIELDS[ex.type].length } },
       h('div', { class: 'ex-head' },
+        h('button', { class: 'grip', 'aria-label': 'Drag to reorder', onpointerdown: e => startDrag(e, el) }, icon('grip', 20)),
         h('button', { class: 'ex-name', onclick: () => openExercise(ex.id) }, ex.name),
         h('button', { class: 'icon-btn', 'aria-label': 'Exercise options', onclick: () => exMenu(we, ei) }, icon('more'))),
       ex.notes ? h('div', { class: 'ex-pinned' }, ex.notes) : null,
       !routine && bw == null && isBW(ex) ? h('div', { class: 'ex-pinned' }, 'Log your body weight under Me so the volume and 1RM of this exercise include it.') : null,
       h('input', { class: 'ex-note', type: 'text', placeholder: live ? 'Add a note for today' : 'Note', value: we.notes || '', oninput: e => { we.notes = e.target.value; touch(); } }),
       h('div', { class: 'set-head' },
-        h('span', null, 'Set'), h('span', null, routine ? '' : 'Previous'),
+        h('span', null, 'Set'), h('span', null, routine ? '' : found?.other ? 'Other gym' : 'Previous'),
         FIELDS[ex.type].map(([, lab]) => h('span', { class: 'c' }, lab)),
         routine ? null : h('span', { class: 'c' }, icon('check', 14))),
       rowsEl,
       h('button', { class: 'btn btn-soft', onclick: () => { we.sets.push({ t: 'n', done: false }); touch(); rerender(ei); } }, icon('plus', 16), 'Add set'));
     we.sets.forEach((_, si) => rowsEl.append(row(ex, we, si, prev, el)));
+    el._we = we;
     if (live) paintPRs(el, we, ex);
     return el;
+  }
+
+  // ---- drag an exercise to a new position ----
+  // While dragging, every card collapses to its title so the whole list fits on screen.
+  function startDrag(e, el) {
+    if (draft.exercises.length < 2 || cardsEl.classList.contains('sorting')) return;
+    e.preventDefault();
+    document.activeElement?.blur?.();
+    const scroller = page.scroller;
+    cardsEl.classList.add('sorting'); el.classList.add('dragging');
+    const r = el.getBoundingClientRect();
+    scroller.scrollTop += r.top + r.height / 2 - e.clientY;      // keep the grabbed card under the finger
+    let y = e.clientY, raf = 0;
+    const tick = () => {
+      const box = scroller.getBoundingClientRect();
+      if (y < box.top + 80) scroller.scrollTop -= 10; else if (y > box.bottom - 80) scroller.scrollTop += 10;
+      let before = null;
+      for (const c of cardsEl.children) {
+        if (c === el) continue;
+        const b = c.getBoundingClientRect();
+        if (y < b.top + b.height / 2) { before = c; break; }
+      }
+      if (before !== el.nextElementSibling) cardsEl.insertBefore(el, before);
+      raf = requestAnimationFrame(tick);
+    };
+    const move = ev => { y = ev.clientY; };
+    const end = () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', end); document.removeEventListener('pointercancel', end);
+      const order = [...cardsEl.children].map(c => c._we).filter(Boolean);
+      const moved = order.some((x, i) => x !== draft.exercises[i]);
+      if (order.length === draft.exercises.length) draft.exercises.splice(0, draft.exercises.length, ...order);
+      if (moved) touch();
+      page.render();
+      requestAnimationFrame(() => cardsEl.children[draft.exercises.indexOf(el._we)]?.scrollIntoView({ block: 'center' }));
+    };
+    // Listen on the document: re-inserting the card while it moves releases the grip's pointer capture.
+    document.addEventListener('pointermove', move); document.addEventListener('pointerup', end); document.addEventListener('pointercancel', end);
+    raf = requestAnimationFrame(tick);
   }
   function rerender(ei) {
     const old = cardsEl.children[ei], fresh = card(draft.exercises[ei], ei);
@@ -209,7 +273,7 @@ export function openEditor(draft, mode, opts = {}) {
   }
   function addExercises(ids) {
     for (const id of ids) {
-      const prev = routine ? null : prevSets(id, draft.start, draft.id);
+      const prev = routine ? null : prevSets(id, draft.start, draft.id, draft.gymId)?.sets;
       const sets = prev ? prev.slice(0, 8).map(s => ({ t: s.t || 'n', done: false })) : Array.from({ length: routine ? 3 : 1 }, () => ({ t: 'n', done: false }));
       draft.exercises.push({ exId: id, notes: '', sets });
     }
@@ -233,7 +297,7 @@ export function openEditor(draft, mode, opts = {}) {
     }
     const st = liveStats(draft, bw);
     let prs = 0;
-    draft.exercises.forEach(we => { const ex = exById(we.exId); if (ex) for (const c of livePRs(ex, we.sets, bw).values()) prs += c.length; });
+    draft.exercises.forEach(we => { const ex = exById(we.exId); if (ex) for (const c of livePRs(ex, we.sets, bw, draft.gymId).values()) prs += c.length; });
     const rt = draft.routineId && S.routines.find(r => r.id === draft.routineId);
     const nameIn = h('input', { type: 'text', value: draft.name || defaultName(draft.start) });
     const minIn = h('input', { type: 'text', inputmode: 'numeric', value: Math.max(1, Math.round((Date.now() - draft.start) / 60000)) });
@@ -247,7 +311,7 @@ export function openEditor(draft, mode, opts = {}) {
       h('button', {
         class: 'btn btn-primary', onclick: async () => {
           const mins = Math.max(1, Math.round(parseNum(minIn.value) || 1));
-          const w = { id: draft.id, name: nameIn.value.trim() || defaultName(draft.start), start: draft.start, end: draft.start + mins * 60000, notes: notesIn.value.trim(), routineId: draft.routineId || null, exercises: doneExercises() };
+          const w = { id: draft.id, name: nameIn.value.trim() || defaultName(draft.start), start: draft.start, end: draft.start + mins * 60000, notes: notesIn.value.trim(), routineId: draft.routineId || null, gymId: draft.gymId || null, exercises: doneExercises() };
           S.workouts.push(w);
           if (upd?.checked) { rt.exercises = w.exercises.map(we => ({ exId: we.exId, notes: '', sets: we.sets.map(clean) })); save('routines'); }
           S.active = null;
@@ -265,7 +329,7 @@ export function openEditor(draft, mode, opts = {}) {
     const [hh, mm] = (timeIn.value || '12:00').split(':').map(Number);
     const start = parseDay(dateIn.value || dayKey(draft.start)) + (hh * 60 + mm) * 60000;
     const mins = Math.max(1, Math.round(parseNum(minIn.value) || 1));
-    const w = { id: draft.id, name: (draft.name || '').trim() || defaultName(start), start, end: start + mins * 60000, notes: (draft.notes || '').trim(), routineId: draft.routineId || null, exercises };
+    const w = { id: draft.id, name: (draft.name || '').trim() || defaultName(start), start, end: start + mins * 60000, notes: (draft.notes || '').trim(), routineId: draft.routineId || null, gymId: draft.gymId || null, exercises };
     const i = S.workouts.findIndex(x => x.id === w.id);
     i >= 0 ? (S.workouts[i] = w) : S.workouts.push(w);
     save('workouts');
@@ -303,8 +367,18 @@ export function openEditor(draft, mode, opts = {}) {
       minIn = h('input', { type: 'text', inputmode: 'numeric', value: Math.max(1, Math.round((draft.end - draft.start) / 60000)), oninput: touch });
       meta = h('div', { class: 'grid-3' }, field('Date', dateIn), field('Start', timeIn), field('Minutes', minIn));
     }
+    const gym = gymById(draft.gymId);
+    const gymBtn = routine || !S.gyms.length ? null : h('button', {
+      class: 'gym-chip', 'aria-label': 'Change gym', onclick: async () => {
+        const g = await chooseGym(gym ? gym.id : null, 'Gym for this workout');
+        if (g === undefined || g === (draft.gymId || null)) return;
+        draft.gymId = g;
+        if (live) { S.settings.lastGym = g; save('settings'); }
+        touch(); page.render();
+      },
+    }, gymDot(gym), gym ? gym.name : 'No gym', icon('down', 14));
     const body = [
-      nameIn, meta,
+      nameIn, gymBtn, meta,
       routine ? null : h('textarea', { class: 'notes-in', rows: 1, placeholder: 'Workout notes', value: draft.notes || '', oninput: e => { draft.notes = e.target.value; touch(); } }),
       cardsEl,
       draft.exercises.length ? null : h('p', { class: 'hint center' }, routine ? 'Add the exercises this routine is made of.' : 'Add your first exercise to start logging.'),
@@ -336,6 +410,7 @@ export function editWorkout(w, dayMs) {
     ? { ...w, exercises: w.exercises.map(we => ({ exId: we.exId, notes: we.notes || '', sets: we.sets.map(s => ({ ...s, done: true })) })) }
     : { id: uid(), name: '', start: (dayMs ?? Date.now() - 36e5), end: (dayMs ?? Date.now() - 36e5) + 36e5, notes: '', routineId: null, exercises: [] };
   if (!w && dayMs != null) { draft.start = dayMs + 18 * 36e5; draft.end = draft.start + 36e5; }
+  if (!w) draft.gymId = S.gyms.length === 1 ? S.gyms[0].id : gymById(S.settings.lastGym)?.id || null;
   openEditor(draft, 'edit', { isNew: !w });
 }
 export function editRoutine(r) {

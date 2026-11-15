@@ -6,7 +6,8 @@ A personal workout log that runs as a Home Screen web app on the iPhone. It work
 - **History:** month and year calendar, every past workout, back-filling and editing.
 - **Progress:** workouts and volume per week, body weight, and a trend for every lift.
 - **Exercises:** about 170 built-in exercises plus your own, each with graphs, all-time records and session history.
-- **Me:** body weight, height, age, backup and restore.
+- **Me:** body weight, height, age, your gyms, backup and restore.
+- **Gyms:** every workout can be tagged with a gym. Graphs draw one line per gym, and previous values and records are kept per gym.
 
 ## Install on an iPhone
 

@@ -27,6 +27,8 @@ export function makeDemo(now = Date.now()) {
     Legs: [['Squat', 100, 142, 5, 3, 1], ['Romanian Deadlift', 95, 130, 8, 3], ['Leg Press', 200, 290, 10, 3], ['Seated Leg Curl', 55, 75, 11, 3], ['Standing Calf Raise', 90, 130, 12, 3], ['Hanging Leg Raise', 'reps', 0, 0, 3]],
   };
   const order = ['Push', 'Pull', 'Legs'];
+  // The second gym's machines and cables run about 15 % heavier, so the same lift moves less weight there.
+  const MACHINE = new Set(['Triceps Rope Pushdown', 'Lat Pulldown', 'Leg Press', 'Seated Leg Curl', 'Standing Calf Raise']);
   const workouts = [];
   let k = 0;
   for (let d = 0; d <= days; d++) {
@@ -37,9 +39,10 @@ export function makeDemo(now = Date.now()) {
     const start = date.getTime() + (17.5 + jit(1.2)) * 36e5;
     if (start > now) continue;
     const p = prog(d), form = 1 + Math.sin(d / 23) * 0.015 + jit(0.012), bw = bwOn(d);
+    const gymId = wd === 6 ? null : wd === 5 || (d > 380 && d < 420) ? 'demo-g2' : 'demo-g1';
     if (wd === 6) {
       const km = +(4 + rnd() * 4).toFixed(1);
-      workouts.push({ id: 'demo' + d, name: 'Run', start, end: start + km * (5.6 - 0.5 * p) * 60000, notes: '', routineId: null, exercises: [{ exId: id('Running'), notes: '', sets: [{ t: 'n', km, sec: Math.round(km * (5.6 - 0.5 * p + jit(0.15)) * 60) }] }] });
+      workouts.push({ id: 'demo' + d, name: 'Run', gymId, start, end: start + km * (5.6 - 0.5 * p) * 60000, notes: '', routineId: null, exercises: [{ exId: id('Running'), notes: '', sets: [{ t: 'n', km, sec: Math.round(km * (5.6 - 0.5 * p + jit(0.15)) * 60) }] }] });
       continue;
     }
     const name = order[k++ % 3], exercises = [];
@@ -58,13 +61,13 @@ export function makeDemo(now = Date.now()) {
           sets.push(s);
         }
       } else {
-        const rm = (a + (b - a) * p) * form, wk = r25(rm / (1 + reps / 30) * 0.97);
+        const rm = (a + (b - a) * p) * form * (gymId === 'demo-g2' && MACHINE.has(ex) ? 0.85 : 1), wk = r25(rm / (1 + reps / 30) * 0.97);
         if (warm) sets.push({ t: 'w', kg: r25(wk * 0.6), reps: 5 });
         for (let i = 0; i < nsets; i++) sets.push({ t: 'n', kg: wk, reps: Math.max(1, reps + (rnd() < 0.25 ? 1 : 0) - Math.floor(i * 0.6 + rnd() * 0.7)) });
       }
       exercises.push({ exId: id(ex), notes: '', sets });
     }
-    workouts.push({ id: 'demo' + d, name, start, end: start + (58 + rnd() * 25) * 60000, notes: '', routineId: 'demo-' + name, exercises });
+    workouts.push({ id: 'demo' + d, name, gymId, start, end: start + (58 + rnd() * 25) * 60000, notes: '', routineId: 'demo-' + name, exercises });
   }
   const routines = order.map(name => {
     const last = workouts.filter(w => w.name === name).at(-1);
@@ -72,6 +75,6 @@ export function makeDemo(now = Date.now()) {
   });
   return {
     app: 'gym', schema: 1, exportedAt: new Date(now).toISOString(),
-    data: { exercises: [], workouts, routines, measurements, profile: { birth: '2001-03-14', heightCm: 182 }, settings: { range: '1Y' }, meta: { demo: true } },
+    data: { exercises: [], workouts, routines, measurements, gyms: [{ id: 'demo-g1', name: 'City gym', color: '#3987e5' }, { id: 'demo-g2', name: 'Campus gym', color: '#d95926' }], profile: { birth: '2001-03-14', heightCm: 182 }, settings: { range: '1Y' }, meta: { demo: true } },
   };
 }

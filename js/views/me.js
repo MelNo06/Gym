@@ -1,10 +1,10 @@
 // Me tab: measurements, backup, settings.
 import { h, icon, uid, num, fmtDate, dayKey, parseDay, parseNum, DAY } from '../util.js';
-import { S, save, exportData, importData, wipe, toCSV, storageInfo, APP_VERSION } from '../store.js';
+import { S, save, exportData, importData, wipe, toCSV, storageInfo, gymById, GYM_COLORS, APP_VERSION } from '../store.js';
 import { trend, rangeFrom, csvRow } from '../stats.js';
 import { sheet, confirmBox, toast, field, refresh } from '../ui.js';
 import { xyChart, C } from '../charts.js';
-import { chartCard, rangeControl, perMonth } from './common.js';
+import { chartCard, rangeControl, perMonth, gymDot } from './common.js';
 import { tile } from './editor.js';
 
 const latest = key => S.measurements.slice().reverse().find(m => m[key] != null);
@@ -79,6 +79,47 @@ function profileSheet() {
   ], { title: 'About you' });
 }
 
+function gymSheet(g) {
+  const isNew = !g;
+  let color = g?.color || GYM_COLORS.find(c => !S.gyms.some(x => x.color === c)) || GYM_COLORS[0];
+  const nameIn = h('input', { type: 'text', value: g?.name || '', placeholder: 'Gym name', autocapitalize: 'words' });
+  const sw = h('div', { class: 'swatches' });
+  const paint = () => sw.replaceChildren(...GYM_COLORS.map(c => h('button', { class: 'swatch' + (c === color ? ' on' : ''), style: { background: c }, 'aria-label': 'Colour', 'aria-pressed': String(c === color), onclick: () => { color = c; paint(); } }, c === color ? icon('check', 16) : null)));
+  paint();
+  const untagged = S.workouts.filter(w => !gymById(w.gymId)).length;
+  const here = g ? S.workouts.filter(w => w.gymId === g.id).length : 0;
+  sheet(close => [
+    field('Name', nameIn),
+    h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Colour in graphs'), sw),
+    h('button', {
+      class: 'btn btn-primary', onclick: () => {
+        const name = nameIn.value.trim();
+        if (!name) { toast('Give the gym a name.'); nameIn.focus(); return; }
+        if (isNew) S.gyms.push({ id: 'g-' + uid(), name, color }); else Object.assign(g, { name, color });
+        save('gyms'); close(); refresh();
+      },
+    }, 'Save'),
+    !isNew && untagged ? h('button', {
+      class: 'btn btn-soft', onclick: async () => {
+        close();
+        if (!await confirmBox({ title: `Tag ${untagged} workout${untagged === 1 ? '' : 's'} as ${g.name}?`, text: 'Every workout that has no gym yet is assigned to this gym.', ok: 'Tag workouts' })) return;
+        for (const w of S.workouts) if (!gymById(w.gymId)) w.gymId = g.id;
+        save('workouts'); refresh(); toast('Workouts tagged');
+      },
+    }, `Tag the ${untagged} workout${untagged === 1 ? '' : 's'} without a gym`) : null,
+    isNew ? null : h('button', {
+      class: 'btn btn-ghost danger', onclick: async () => {
+        close();
+        if (!await confirmBox({ title: `Delete ${g.name}?`, text: here ? `The ${here} workout${here === 1 ? '' : 's'} logged there are kept and no longer have a gym.` : null, ok: 'Delete gym', danger: true })) return;
+        S.gyms.splice(S.gyms.indexOf(g), 1);
+        for (const w of S.workouts) if (w.gymId === g.id) w.gymId = null;
+        if (S.active?.gymId === g.id) { S.active.gymId = null; save('active'); }
+        save('gyms', 'workouts'); refresh(); toast('Gym deleted');
+      },
+    }, 'Delete gym'),
+  ], { title: isNew ? 'Add gym' : 'Edit gym' });
+}
+
 async function shareFile(name, text, type) {
   const file = new File([text], name, { type });
   if (navigator.canShare?.({ files: [file] })) {
@@ -142,6 +183,16 @@ export function meTab(rerender) {
         h('span', { class: 'row-main' }, h('b', null, `${num(m.kg, 1)} kg`), h('small', null, fmtDate(parseDay(m.date), { weekday: true, year: true }))),
         m.bf != null ? h('span', { class: 'muted' }, `${num(m.bf, 1)} %`) : null))),
       entries.length > 6 && !showAll ? h('button', { class: 'btn btn-soft', onclick: () => { showAll = true; rerender(); } }, `Show all ${entries.length}`) : null) : null,
+
+    h('section', { class: 'card' },
+      h('div', { class: 'card-head' }, h('h3', null, 'Gyms'), h('button', { class: 'btn-pill ghost', onclick: () => gymSheet(null) }, icon('plus', 16), 'Add gym')),
+      S.gyms.length
+        ? h('div', { class: 'list flush' }, S.gyms.map(g => {
+          const n = S.workouts.filter(w => w.gymId === g.id).length;
+          return h('button', { class: 'list-row', onclick: () => gymSheet(g) }, gymDot(g),
+            h('span', { class: 'row-main' }, h('b', null, g.name), h('small', null, `${n} workout${n === 1 ? '' : 's'}`)), icon('right', 16));
+        }))
+        : h('p', { class: 'chart-note' }, 'Add the gyms you train at. You pick the gym when a workout starts. Graphs, previous values and records are then kept per gym, because the same machine can feel heavier or lighter somewhere else.')),
 
     h('section', { class: 'card' }, h('h3', null, 'Backup'),
       h('p', { class: 'chart-note' }, backupAge == null ? 'No backup exported yet.' : backupAge === 0 ? 'Last backup exported today.' : `Last backup exported ${backupAge} day${backupAge === 1 ? '' : 's'} ago.`,

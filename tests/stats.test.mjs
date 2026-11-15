@@ -48,8 +48,9 @@ near(r.top.v, 102.5); assert.equal(r.top.set.reps, 5); near(r.setVol.v, 1080); n
 const rb = st.repBest(B);
 near(rb[1].ext, 102.5); near(rb[5].ext, 102.5); near(rb[6].ext, 90); near(rb[12].ext, 90);
 // prev sets
-assert.equal(st.prevSets(B, now, null).length, 1); assert.equal(st.prevSets(B, day(10), null).length, 2);
-assert.equal(st.prevSets(B, now, 'w3').length, 2);
+assert.equal(st.prevSets(B, now, null).sets.length, 1); assert.equal(st.prevSets(B, day(10), null).sets.length, 2);
+assert.equal(st.prevSets(B, now, 'w3').sets.length, 2);
+near(rb[12].ext, 90); assert.equal(rb[13], null); assert.equal(rb.length, 21);
 // trend: perfectly linear +3 kg / 30.4375 d
 const tr = st.trend([0, 10, 20, 30.4375].map(d => ({ x: now + d * DAY, y: 100 + 3 * d / 30.4375 })));
 near(tr.perMonth, 3, 1e-9); near(tr.pct, 3, 1e-9);
@@ -59,9 +60,30 @@ const live = st.livePRs(S.exercises.find(e => e.id === B), [{ t: 'n', kg: 105, r
 assert.deepEqual(live.get(0), ['rm', 'wt']);
 assert.equal(st.streakWeeks(now) >= 0, true);
 
+// ---- gyms: previous values and records are kept per gym ----
+S.gyms = [{ id: 'g1', name: 'One', color: '#3987e5' }, { id: 'g2', name: 'Two', color: '#d95926' }];
+S.workouts[0].gymId = 'g1'; S.workouts[1].gymId = 'g2'; S.workouts[2].gymId = 'g1';
+S.workouts.push({ id: 'w4', name: 'D', gymId: 'g2', start: day(2), end: day(2) + 36e5, exercises: [{ exId: B, sets: [{ t: 'n', kg: 95, reps: 7.5 }] }] });
+rev.n++;
+const gb = st.sessionsOf(B);
+assert.equal(gb[1].prs.size, 0, 'first session at a new gym sets the baseline');     // 102.5x5 at g2
+assert.equal(gb[2].prs.size, 0);                                                      // 100x5 at g1 equals the g1 best
+assert.equal(gb[3].prs.size, 0, '95x7.5 at g2 beats nothing at g2');                  // 1RM 118.8 < 119.6 ... see below
+near(gb[3].sets[0].vol, 95 * 7.5); near(gb[3].rm.mid, (st.epley(95, 7.5) + st.brzycki(95, 7.5)) / 2);
+assert.deepEqual(st.gymsOf(B), ['g1', 'g2']);
+assert.deepEqual(st.prevSets(B, now, null, 'g1'), { sets: S.workouts[2].exercises[0].sets, other: false });
+assert.deepEqual(st.prevSets(B, now, null, 'g2'), { sets: S.workouts[3].exercises[0].sets, other: false });
+assert.equal(st.prevSets(B, now, null, null).other, true, 'falls back to another gym');
+near(st.records(B, 'g1').top.v, 100); near(st.records(B, 'g2').top.v, 102.5); near(st.records(B).top.v, 102.5);
+near(st.repBest(B, 'g2')[7].ext, 95); assert.equal(st.repBest(B, 'g2')[8].ext, 90); near(st.repBest(B, 'g1')[5].ext, 100); assert.equal(st.repBest(B, 'g1')[6], null);
+// live PR at g1 compares with g1 only: 102.5 is a record there although g2 already has it
+assert.deepEqual(st.livePRs(S.exercises.find(e => e.id === B), [{ t: 'n', kg: 102.5, reps: 5, done: true }], 80, 'g1').get(0), ['rm', 'wt', 'vol']);
+assert.equal(st.livePRs(S.exercises.find(e => e.id === B), [{ t: 'n', kg: 102.5, reps: 5, done: true }], 80, 'g2').size, 0);
+S.gyms = [];
+
 // demo data sanity
 const demo = makeDemo(now);
-S.workouts = demo.data.workouts; S.measurements = demo.data.measurements; rev.n++;
+S.workouts = demo.data.workouts; S.measurements = demo.data.measurements; S.gyms = demo.data.gyms; rev.n++;
 S.workouts.sort((a, b) => a.start - b.start);
 const bench = st.sessionsOf(B), pull = st.sessionsOf(P);
 console.log('demo workouts', S.workouts.length, 'bench sessions', bench.length, 'pull-up sessions', pull.length);
@@ -71,4 +93,5 @@ console.log('dip last', JSON.stringify(st.sessionsOf('lib-dip').at(-1).w.exercis
 for (const w of S.workouts) for (const we of w.exercises) { assert.ok(S.exercises.find(e => e.id === we.exId), 'unknown ' + we.exId); for (const s of we.sets) assert.ok(s.reps == null || s.reps >= 1); }
 const b = st.bins(now - 91 * DAY, now, 'week'); console.log('weekly bins', b.map(x => x.n).join(' '));
 console.log('streak', st.streakWeeks(now), 'PR total', [...st.idx().wstats.values()].reduce((a, x) => a + x.prs, 0));
+const lp = st.sessionsOf('lib-lat-pulldown'); console.log('lat pulldown top by gym', lp.filter(x => x.gym === 'demo-g1').at(-1).top.ext, lp.filter(x => x.gym === 'demo-g2').at(-1).top.ext, 'gyms', JSON.stringify(st.gymsOf('lib-lat-pulldown')));
 console.log('OK');

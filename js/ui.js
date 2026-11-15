@@ -75,7 +75,7 @@ const sheets = [];
 export function closeSheets() { while (sheets.length) sheets.pop()(); }
 
 /** build(close) returns the sheet content. */
-export function sheet(build, { title } = {}) {
+export function sheet(build, { title, onClose } = {}) {
   const backdrop = h('div', { class: 'sheet-back' });
   const box = h('div', { class: 'sheet', role: 'dialog', 'aria-label': title || 'Options' });
   let closed = false;
@@ -84,6 +84,7 @@ export function sheet(build, { title } = {}) {
     const i = sheets.indexOf(close); if (i >= 0) sheets.splice(i, 1);
     backdrop.classList.remove('in'); box.classList.remove('in');
     setTimeout(() => { backdrop.remove(); box.remove(); }, 220);
+    onClose?.();
   };
   backdrop.addEventListener('click', close);
   box.append(h('div', { class: 'sheet-grip' }), title ? h('div', { class: 'sheet-title' }, title) : '', h('div', { class: 'sheet-content' }, build(close)));
@@ -104,13 +105,12 @@ export function confirmBox({ title, text, ok = 'OK', cancel = 'Cancel', danger =
   return new Promise(res => {
     let answered = false;
     const done = v => { if (!answered) { answered = true; res(v); } };
-    const close = sheet(c => [
+    // Closing the sheet any other way (backdrop, back gesture) counts as cancel.
+    sheet(c => [
       text ? h('p', { class: 'sheet-text' }, text) : null,
       h('button', { class: 'btn ' + (danger ? 'btn-danger' : 'btn-primary'), onclick: () => { done(true); c(); } }, ok),
       h('button', { class: 'btn btn-ghost', onclick: () => { done(false); c(); } }, cancel),
-    ], { title });
-    // Tapping the backdrop counts as cancel.
-    const iv = setInterval(() => { if (!sheets.includes(close)) { clearInterval(iv); done(false); } }, 200);
+    ], { title, onClose: () => done(false) });
   });
 }
 

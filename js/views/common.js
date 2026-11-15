@@ -5,6 +5,9 @@ import { calc, setText, PR_LABEL, RANGES } from '../stats.js';
 import { segmented } from '../ui.js';
 import { mount, legend } from '../charts.js';
 
+/** Small colour dot for a gym (grey when there is none). */
+export const gymDot = g => h('i', { class: 'gym-dot', style: { background: g ? g.color : 'var(--tx3)' } });
+
 export const prChips = cats => (cats || []).map(c => h('span', { class: 'pr' }, icon('trophy', 13), PR_LABEL[c]));
 
 /** Read-only list of the sets of one exercise in one workout. prFor(i) returns the PR categories of set i. */

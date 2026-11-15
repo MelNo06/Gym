@@ -73,6 +73,21 @@ if (window.visualViewport) {
   vv.addEventListener('resize', kb); vv.addEventListener('scroll', kb);
 }
 
+// Installed iOS web apps can leave the viewport shrunk after the keyboard closes, which shows as a dead
+// strip at the bottom. Re-measuring a full-height element makes WebKit restore the full height.
+const standalone = navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+let maxVH = window.innerHeight;
+window.addEventListener('resize', () => { maxVH = Math.max(maxVH, window.innerHeight); });
+window.addEventListener('orientationchange', () => { maxVH = 0; setTimeout(() => { maxVH = window.innerHeight; }, 500); });
+function healViewport() {
+  if (!standalone || maxVH - window.innerHeight <= 4) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')) return;   // keyboard still open
+  const app = document.getElementById('app'), top = view.scrollTop;
+  app.style.display = 'none'; void app.offsetHeight; app.style.display = '';
+  view.scrollTop = top;
+}
+document.addEventListener('focusout', () => setTimeout(healViewport, 180));
+
 // ---- start ----
 history.replaceState({ depth: 0 }, '');
 setTabRenderer(render);

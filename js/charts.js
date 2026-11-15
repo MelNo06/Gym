@@ -96,7 +96,7 @@ function xLabel(svg, px, H, w, text) {
 /**
  * Line / band / dot chart over time (or over any numeric x when xTicks is given).
  * o = { x0, x1, series:[{pts:[{x,y}], color, kind:'line'|'linedots'|'dots', dash, width, area}],
- *       band:{pts:[{x,lo,hi}], color}, markers:[{x,y}], trend:{x0,y0,x1,y1}, zero, yFmt,
+ *       band:{pts:[{x,lo,hi}], color} or bands:[...], markers:[{x,y}], trend:{x0,y0,x1,y1}, zero, yFmt,
  *       xTicks:[{x,label}], scrub:[{x,title,rows,marks:[{y,color}]}], label }
  */
 export function xyChart(el, w, H, o) {
@@ -104,7 +104,8 @@ export function xyChart(el, w, H, o) {
   let lo = Infinity, hi = -Infinity;
   const see = v => { if (v != null && isFinite(v)) { if (v < lo) lo = v; if (v > hi) hi = v; } };
   o.series.forEach(sr => sr.pts.forEach(p => see(p.y)));
-  o.band?.pts.forEach(p => { see(p.lo); see(p.hi); });
+  const bands = [...(o.bands || []), ...(o.band ? [o.band] : [])].filter(b => b.pts.length);
+  bands.forEach(bd => bd.pts.forEach(p => { see(p.lo); see(p.hi); }));
   if (lo === Infinity) { lo = 0; hi = 1; }
   if (o.zero) lo = Math.min(lo, 0);
   const padY = (hi - lo) * 0.1 || Math.abs(hi) * 0.05 || 1;
@@ -122,12 +123,12 @@ export function xyChart(el, w, H, o) {
     s('text', { x: ml - 7, y: Y(t) + 3.5, class: 'tick', 'text-anchor': 'end' }, labels[i])));
   (o.xTicks || timeTicks(x0, x1, pw)).forEach(t => xLabel(svg, X(t.x), H, w, t.label));
 
-  if (o.band?.pts.length) {
-    const b = o.band.pts;
-    if (b.length === 1) svg.append(s('line', { x1: X(b[0].x), x2: X(b[0].x), y1: Y(b[0].hi), y2: Y(b[0].lo), stroke: o.band.color, 'stroke-width': 8, 'stroke-linecap': 'round', opacity: .3 }));
+  for (const bd of bands) {
+    const b = bd.pts;
+    if (b.length === 1) svg.append(s('line', { x1: X(b[0].x), x2: X(b[0].x), y1: Y(b[0].hi), y2: Y(b[0].lo), stroke: bd.color, 'stroke-width': 8, 'stroke-linecap': 'round', opacity: .3 }));
     else svg.append(s('path', {
       d: 'M' + b.map(p => `${f(X(p.x))},${f(Y(p.hi))}`).join('L') + 'L' + b.slice().reverse().map(p => `${f(X(p.x))},${f(Y(p.lo))}`).join('L') + 'Z',
-      fill: o.band.color, opacity: .26,
+      fill: bd.color, opacity: bands.length > 1 ? .2 : .26,
     }));
   }
   for (const sr of o.series) {
@@ -136,8 +137,8 @@ export function xyChart(el, w, H, o) {
     if (sr.area && sr.pts.length > 1) svg.append(s('path', { d: `${path}L${f(X(sr.pts.at(-1).x))},${f(Y(lo))}L${f(X(sr.pts[0].x))},${f(Y(lo))}Z`, fill: sr.color, opacity: .1 }));
     if (kind !== 'dots' && sr.pts.length > 1) svg.append(s('path', { d: path, fill: 'none', stroke: sr.color, 'stroke-width': sr.width || 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round', 'stroke-dasharray': sr.dash || null }));
     const sparse = sr.pts.length <= pw / 9;
-    if (kind === 'dots' || (kind === 'linedots' && sparse) || sr.pts.length === 1) {
-      const r = kind === 'dots' && !sparse ? 2 : 3.5;
+    if (kind === 'dots' || (kind === 'linedots' && sr.pts.length <= pw / 4) || sr.pts.length === 1) {
+      const r = sparse ? 3.5 : 2;
       for (const p of sr.pts) svg.append(s('circle', { cx: f(X(p.x)), cy: f(Y(p.y)), r, fill: sr.color, class: sparse ? 'ring' : null }));
     }
   }

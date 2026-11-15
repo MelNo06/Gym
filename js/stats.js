@@ -1,5 +1,5 @@
 // Everything derived from the raw log: loads, estimated 1RM, records, PRs, trends, bins.
-import { S, rev, exById, bwAt } from './store.js';
+import { S, rev, exById, bwAt, gymById } from './store.js';
 import { DAY, num, fmtClock, weekStart, monthStart } from './util.js';
 
 // ---- estimated one-rep max ----
@@ -61,7 +61,7 @@ const CATS = { weight: ['rm', 'wt', 'vol'], wbw: ['rm', 'wt', 'vol'], abw: ['rm'
 export const PR_LABEL = { rm: '1RM', wt: 'Weight', vol: 'Volume', reps: 'Reps', sec: 'Time', km: 'Distance' };
 const catVal = (cat, c) =>
   cat === 'rm' ? c.rm?.mid
-    : cat === 'wt' ? (c.reps >= 1 ? c.ext : null)
+    : cat === 'wt' ? (c.reps > 0 ? c.ext : null)
       : cat === 'vol' ? c.vol : cat === 'reps' ? c.reps : cat === 'sec' ? c.sec : c.km;
 
 function sessionBest(ex, sets) {
@@ -92,7 +92,7 @@ export function idx() {
       const ex = exById(we.exId);
       const sess = ex && summarize(ex, we.sets, bw);
       if (!sess) return;
-      sess.w = w; sess.t = w.start; sess.ei = ei;
+      sess.w = w; sess.t = w.start; sess.ei = ei; sess.gym = w.gymId || null;
       st.vol += sess.vol; st.sets += sess.sets.length; st.reps += sess.reps;
       if (!byEx.has(ex.id)) byEx.set(ex.id, []);
       byEx.get(ex.id).push(sess);
@@ -100,9 +100,13 @@ export function idx() {
     wstats.set(w.id, st);
   }
   for (const [id, arr] of byEx) {
-    const ex = exById(id), best = {};
-    arr.forEach((sess, n) => {
-      sess.prs = n ? sessionPRs(ex, best, sess.sets) : new Map();
+    // Records are kept per gym: the same machine can be heavier or lighter somewhere else.
+    const ex = exById(id), byGym = new Map();
+    arr.forEach(sess => {
+      const first = !byGym.has(sess.gym);
+      if (first) byGym.set(sess.gym, {});
+      const best = byGym.get(sess.gym);
+      sess.prs = first ? new Map() : sessionPRs(ex, best, sess.sets);
       if (sess.prs.size) {
         if (!prs.has(sess.w.id)) prs.set(sess.w.id, new Map());
         for (const [i, cats] of sess.prs) { prs.get(sess.w.id).set(sess.ei + ':' + i, cats); wstats.get(sess.w.id).prs += cats.length; }
@@ -110,7 +114,7 @@ export function idx() {
       const sb = sessionBest(ex, sess.sets);
       for (const c in sb) if (best[c] == null || sb[c].v > best[c]) best[c] = sb[c].v;
     });
-    bests.set(id, best);
+    bests.set(id, byGym);
   }
   cache = { n: rev.n, byEx, prs, bests, wstats };
   return cache;
@@ -118,9 +122,9 @@ export function idx() {
 export const sessionsOf = exId => idx().byEx.get(exId) || [];
 export const workoutStats = w => idx().wstats.get(w.id) || { vol: 0, sets: 0, reps: 0, dur: 0, prs: 0 };
 
-/** PRs for a workout that is still being logged, measured against the whole saved history. */
-export function livePRs(ex, rawSets, bw) {
-  const best = idx().bests.get(ex.id);
+/** PRs for a workout that is still being logged, measured against the saved history at the same gym. */
+export function livePRs(ex, rawSets, bw, gym = null) {
+  const best = idx().bests.get(ex.id)?.get(gym || null);
   const sm = best && summarize(ex, rawSets, bw, true);
   return sm ? sessionPRs(ex, best, sm.sets) : new Map();
 }
@@ -133,18 +137,40 @@ export function liveStats(draft, bw) {
   }
   return st;
 }
-/** Raw sets of the most recent earlier session of an exercise (warm-ups included). */
-export function prevSets(exId, beforeT, excludeWid) {
+/**
+ * Raw sets of the most recent earlier session of an exercise (warm-ups included).
+ * Prefers a session at the same gym; `other` is true when it had to fall back to another gym.
+ */
+export function prevSets(exId, beforeT, excludeWid, gym = null) {
   const arr = sessionsOf(exId);
+  let any = null;
   for (let i = arr.length - 1; i >= 0; i--) {
-    if (arr[i].t < beforeT && arr[i].w.id !== excludeWid) return arr[i].w.exercises[arr[i].ei].sets;
+    const s = arr[i];
+    if (s.t >= beforeT || s.w.id === excludeWid) continue;
+    const sets = s.w.exercises[s.ei].sets;
+    if (s.gym === (gym || null)) return { sets, other: false };
+    if (!any) any = sets;
   }
-  return null;
+  return any ? { sets: any, other: true } : null;
+}
+/** Gyms an exercise was logged at: ids in the order of the gym list, then null for "no gym". */
+export function gymsOf(exId) {
+  const seen = new Set(sessionsOf(exId).map(s => s.gym));
+  const out = S.gyms.map(g => g.id).filter(id => seen.has(id));
+  if ([...seen].some(k => k === null || !S.gyms.some(g => g.id === k))) out.push(null);
+  return out;
+}
+/** Sessions of one gym. `undefined` means every gym; ids of deleted gyms count as "no gym". */
+export function sessionsAt(exId, gym) {
+  const arr = sessionsOf(exId);
+  if (gym === undefined) return arr;
+  const known = new Set(S.gyms.map(g => g.id));
+  return arr.filter(s => (known.has(s.gym) ? s.gym : null) === gym);
 }
 
-/** All-time records and totals for one exercise. */
-export function records(exId) {
-  const arr = sessionsOf(exId);
+/** All-time records and totals for one exercise, optionally for one gym only. */
+export function records(exId, gym) {
+  const arr = sessionsAt(exId, gym);
   const r = { n: arr.length, sets: 0, reps: 0, vol: 0, sec: 0, km: 0, first: arr[0]?.t, last: arr.at(-1)?.t };
   const up = (key, v, t, extra) => { if (v != null && (!r[key] || v > r[key].v)) r[key] = { v, t, ...extra }; };
   for (const s of arr) {
@@ -160,14 +186,15 @@ export function records(exId) {
   return r;
 }
 
-/** Heaviest weight done for at least r reps (r = 1..12) inside a time window. Index 0 is unused. */
-export function repBest(exId, from = -Infinity, to = Infinity) {
-  const best = new Array(13).fill(null);
-  for (const s of sessionsOf(exId)) {
+export const MAX_REPS = 20;
+/** Heaviest weight done for at least r reps (r = 1..20), optionally for one gym. Index 0 is unused. */
+export function repBest(exId, gym, from = -Infinity, to = Infinity) {
+  const best = new Array(MAX_REPS + 1).fill(null);
+  for (const s of sessionsAt(exId, gym)) {
     if (s.t < from || s.t >= to) continue;
     for (const c of s.sets) {
       if (!c.reps || c.ext == null) continue;
-      for (let r = 1; r <= Math.min(c.reps, 12); r++) {
+      for (let r = 1; r <= Math.min(Math.floor(c.reps), MAX_REPS); r++) {
         if (!best[r] || c.ext > best[r].ext) best[r] = { ext: c.ext, reps: c.reps, t: s.t };
       }
     }
@@ -263,7 +290,7 @@ export function csvRow(w, ex, set, i) {
   const bw = bwAt(w.start), c = calc(ex, set, bw), d = new Date(w.start);
   const p = n => String(n).padStart(2, '0');
   const ok = c.load > 0 && c.reps >= 1 && c.reps <= 10 && ex.type !== 'bw';
-  return [`${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`, `${p(d.getHours())}:${p(d.getMinutes())}`, w.name, ex.name, ex.type,
+  return [`${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`, `${p(d.getHours())}:${p(d.getMinutes())}`, w.name, gymById(w.gymId)?.name ?? null, ex.name, ex.type,
     i + 1, c.t, c.kg, c.reps, c.sec, c.km, bw, c.load == null ? null : +c.load.toFixed(2),
     ok ? +epley(c.load, c.reps).toFixed(2) : null, ok ? +brzycki(c.load, c.reps).toFixed(2) : null];
 }
