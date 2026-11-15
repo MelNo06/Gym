@@ -24,7 +24,7 @@ function render() {
   view.replaceChildren(...[t[3](render)].flat(Infinity).filter(Boolean));
   bar.replaceChildren(...TABS.map(([id, label, ic]) =>
     h('button', { class: id === tab ? 'on' : '', 'aria-current': id === tab ? 'page' : null, onclick: () => { if (tab !== id) { tab = id; render(); view.scrollTop = 0; } else view.scrollTo({ top: 0, behavior: 'smooth' }); } },
-      icon(ic, 24), h('span', null, label))));
+      icon(ic, 28), h('span', null, label))));
   // Running-workout bar on every tab except the Workout tab, which shows its own card.
   const a = S.active;
   mini.hidden = !a || tab === 'workout';
@@ -71,11 +71,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 // Keep sheets and page bottoms above the on-screen keyboard.
 if (window.visualViewport) {
   const vv = window.visualViewport;
-  const kb = () => {
-    const hidden = Math.round(window.innerHeight - vv.height - vv.offsetTop);
-    // With a keyboard up, also lift past the part of the app that was stretched below the reported window.
-    document.documentElement.style.setProperty('--kb', (hidden > 40 ? hidden + fitScreen() : Math.max(0, hidden)) + 'px');
-  };
+  const kb = () => document.documentElement.style.setProperty('--kb', Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) + 'px');
   vv.addEventListener('resize', kb); vv.addEventListener('scroll', kb);
 }
 
