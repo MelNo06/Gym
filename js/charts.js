@@ -183,37 +183,35 @@ export function barChart(el, w, H, o) {
 }
 
 /**
- * Bars stacked from several coloured parts. o = { bins:[{title, tick, parts:[{v, color, label}]}], yFmt, label }
- * Parts are separated by a 2px gap so neighbouring colours never touch.
+ * One bar per category, each in its own colour, with the value written above it and the name below.
+ * o = { bars:[{label, v, color, rows}], yFmt, label }
  */
-export function stackedBar(el, w, H, o) {
+export function catBars(el, w, H, o) {
   const fmt = o.yFmt || (v => num(v, 0));
-  const totals = o.bins.map(b => b.parts.reduce((a, p) => a + p.v, 0));
-  const ticks = niceTicks(0, Math.max(1e-9, ...totals) * 1.05, 3), hi = ticks.at(-1), labels = ticks.map(fmt);
-  const { svg, ml, mr, mt, pw, ph } = frame(w, H, ticks, labels, o.label);
-  const Y = y => mt + (1 - y / hi) * ph, slot = pw / o.bins.length, bw = clamp(slot - 2, 1, 26);
+  const ticks = niceTicks(0, Math.max(4, ...o.bars.map(b => b.v)) * 1.12, 3).filter(t => Number.isInteger(t));
+  const hi = ticks.at(-1), labels = ticks.map(fmt);
+  const ml = Math.max(...labels.map(t => t.length)) * 6.3 + 12, mr = 8, mt = 18, mb = 64;   // room below for slanted names
+  const svg = s('svg', { width: w, height: H, viewBox: `0 0 ${w} ${H}`, role: 'img', 'aria-label': o.label || 'Chart' });
+  const pw = w - ml - mr, ph = H - mt - mb, Y = y => mt + (1 - y / hi) * ph;
+  const slot = pw / o.bars.length, bw = clamp(slot - 6, 4, 34);
   ticks.forEach((t, i) => svg.append(
     s('line', { x1: ml, x2: w - mr, y1: Y(t), y2: Y(t), class: 'grid' }),
     s('text', { x: ml - 7, y: Y(t) + 3.5, class: 'tick', 'text-anchor': 'end' }, labels[i])));
-  let lastLabel = -99;
-  const cols = [];
-  o.bins.forEach((b, i) => {
-    const cx = ml + slot * (i + .5), g = s('g');
-    if (b.tick && cx - lastLabel > 44) { xLabel(svg, cx, H, w, b.tick); lastLabel = cx; }
-    let acc = 0;
-    for (const p of b.parts) {
-      if (!(p.v > 0)) continue;
-      const y1 = Y(acc), y0 = Y(acc + p.v), hgt = y1 - y0, gap = hgt > 4 ? 2 : 0;
-      g.append(s('rect', { x: cx - bw / 2, y: y0 + gap, width: bw, height: Math.max(1, hgt - gap), rx: Math.min(2, bw / 2), fill: p.color }));
-      acc += p.v;
-    }
-    svg.append(g); cols[i] = g;
+  const marks = [];
+  o.bars.forEach((b, i) => {
+    const cx = ml + slot * (i + .5), x = cx - bw / 2, y0 = Y(0), g = s('g');
+    if (b.v > 0) {
+      const hgt = Math.max(3, y0 - Y(b.v)), r = Math.min(4, bw / 2, hgt);
+      g.append(s('path', { d: `M${x},${y0}V${y0 - hgt + r}q0,${-r} ${r},${-r}h${bw - 2 * r}q${r},0 ${r},${r}V${y0}Z`, fill: b.color }));
+      g.append(s('text', { x: cx, y: y0 - hgt - 5, class: 'bar-val', 'text-anchor': 'middle' }, fmt(b.v)));
+    } else g.append(s('rect', { x, y: y0 - 2, width: bw, height: 2, rx: 1, fill: b.color, opacity: .55 }));   // empty: a thin stub in the group colour
+    g.append(s('text', { x: cx + 4, y: y0 + 13, class: 'tick cat', 'text-anchor': 'end', transform: `rotate(-45 ${cx + 4} ${y0 + 13})` }, b.label));
+    svg.append(g); marks[i] = g;
   });
   el.append(svg);
-  scrub(el, svg, o.bins.map((b, i) => ({
-    px: ml + slot * (i + .5), i, title: b.title,
-    rows: [...b.parts.filter(p => p.v > 0).slice().reverse().map(p => ({ label: p.label, value: fmt(p.v), color: p.color })), { label: 'Total', value: fmt(totals[i]) }],
-  })), { top: mt, bottom: mt + ph, w, onShow: it => cols.forEach((g, i) => g.setAttribute('opacity', !it || it.i === i ? 1 : .45)) });
+  scrub(el, svg, o.bars.map((b, i) => ({ px: ml + slot * (i + .5), i, title: b.label, rows: b.rows || [{ label: 'Sets', value: fmt(b.v), color: b.color }] })), {
+    top: mt, bottom: mt + ph, w, onShow: it => marks.forEach((g, i) => g.setAttribute('opacity', !it || it.i === i ? 1 : .45)),
+  });
 }
 
 /** Tiny trend line for list rows. */

@@ -1,11 +1,11 @@
 // Progress tab: "Exercises" (every logged lift, tap for its graphs) and "Muscles" (sets per week per muscle group).
 // The Exercises bottom tab (the full exercise list) lives here too.
-import { h, icon, num, fmtDate, signed, MON, DAY } from '../util.js';
-import { S, exColor, groupById } from '../store.js';
+import { h, icon, num, fmtDate, signed, weekStart, MON, DAY } from '../util.js';
+import { S, exColor, exById, groupById } from '../store.js';
 import { shade, NEUTRAL } from '../colors.js';
 import { sessionsOf, primarySeries, trend, rangeFrom, RANGE_TEXT, groupSets } from '../stats.js';
 import { empty, segmented } from '../ui.js';
-import { barChart, stackedBar, spark } from '../charts.js';
+import { barChart, catBars, spark } from '../charts.js';
 import { rangeControl, chartCard, deltaChip, exDot } from './common.js';
 import { openExercise } from './exercise.js';
 import { openExerciseForm, visibleExercises, matches, muscleChips, exSub, inGroup } from './picker.js';
@@ -56,6 +56,32 @@ function exercisesView(rerender) {
 }
 
 // ---------------------------------------------------------------- Progress > Muscles
+/** Sets done since Monday, one bar per muscle group. Starts again at zero every Monday. */
+function thisWeekCard() {
+  const now = Date.now(), mon = weekStart(now), lastMon = weekStart(mon - DAY);
+  const [last, cur] = groupSets(lastMon, now, 'week');
+  const by = { ...(cur ? cur.by : {}) };
+  // Sets already ticked in the workout that is still running count too.
+  for (const we of S.active?.exercises || []) {
+    const ex = exById(we.exId), n = ex ? we.sets.filter(s => s.done && s.t !== 'w').length : 0;
+    if (n) { const k = groupById(ex.group) ? ex.group : ''; by[k] = (by[k] || 0) + n; }
+  }
+  const keys = [...S.groups.map(g => g.id), ...(by[''] ? [''] : [])];
+  const info = k => { const g = groupById(k); return g ? { name: g.name, color: shade(g.color) } : { name: 'No group', color: NEUTRAL[2] }; };
+  const total = keys.reduce((a, k) => a + (by[k] || 0), 0);
+  return chartCard({
+    title: 'This week', value: `${total} set${total === 1 ? '' : 's'}`, height: 250,
+    sub: `Sets per muscle group since Monday ${fmtDate(mon)}. Starts again at zero every Monday.`,
+    draw: (el, w, H) => catBars(el, w, H, {
+      label: 'Sets this week by muscle group',
+      bars: keys.map(k => {
+        const g = info(k), v = by[k] || 0, before = last?.by[k] || 0;
+        return { label: g.name, v, color: g.color, rows: [{ label: 'This week', value: `${v} set${v === 1 ? '' : 's'}`, color: g.color }, { label: 'Last week', value: `${before} set${before === 1 ? '' : 's'}` }] };
+      }),
+    }),
+  });
+}
+
 function musclesView(rerender) {
   const range = S.settings.range, now = Date.now();
   let from = rangeFrom(range, now);
@@ -65,7 +91,7 @@ function musclesView(rerender) {
   const bs = groupSets(from, now, monthly ? 'month' : 'week');
   const val = (b, k) => (b.by[k] || 0) / (monthly ? b.weeks : 1);
   const keys = [...S.groups.map(g => g.id), ''].filter(k => bs.some(b => b.by[k]));
-  const out = [rangeControl(rerender)];
+  const out = [thisWeekCard(), h('div', { class: 'section-head' }, h('h2', null, 'Over time')), rangeControl(rerender)];
   if (!keys.length) return [...out, empty(`No sets in the ${RANGE_TEXT[range]}`, 'Pick a longer range.')];
   const info = k => { const g = groupById(k); return g ? { name: g.name, color: shade(g.color) } : { name: 'No group', color: NEUTRAL[2] }; };
   const weeks = Math.max(1, (now - bs[0].x) / (7 * DAY));
@@ -78,18 +104,7 @@ function musclesView(rerender) {
     return d.getDate() <= 7 ? (d.getMonth() === 0 ? String(d.getFullYear()) : MON[d.getMonth()]) : null;
   };
   const f = v => num(v, monthly ? 1 : 0);
-  const total = keys.reduce((a, k) => a + sum(k), 0);
-
-  out.push(chartCard({
-    title: 'Sets per week, all muscle groups', value: num(total / weeks, 1), height: 210,
-    sub: `average over the ${RANGE_TEXT[range]}`,
-    legendItems: keys.map(k => ({ label: info(k).name, color: info(k).color, kind: 'dot' })),
-    note: (monthly ? 'Each bar is one month, shown as its average number of sets per week. ' : 'Each bar is one week. ') + 'Every set counts for the muscle group of its exercise. Warm-up sets are left out and all gyms are added together.',
-    draw: (el, w, H) => stackedBar(el, w, H, {
-      label: 'Sets per week by muscle group', yFmt: f,
-      bins: bs.map(b => ({ title: title(b), tick: tick(b), parts: keys.map(k => ({ v: val(b, k), color: info(k).color, label: info(k).name })) })),
-    }),
-  }));
+  out.push(h('p', { class: 'hint' }, (monthly ? 'Each bar is one month, shown as its average number of sets per week. ' : 'Each bar is one week. ') + 'Warm-up sets are left out and all gyms are added together.'));
   for (const k of keys.slice().sort((a, b) => sum(b) - sum(a))) {
     const g = info(k), avg = sum(k) / weeks;
     out.push(chartCard({

@@ -282,6 +282,8 @@ h3 > .ex-dot { margin-right: 8px; }
 .grid { stroke: var(--line); stroke-width: 1; }
 .grid.zero { stroke: var(--tx3); }
 .tick { fill: var(--tx3); font-size: 11px; font-variant-numeric: tabular-nums; }
+.tick.cat { fill: var(--tx2); font-size: 11.5px; }
+.bar-val { fill: var(--tx); font: 600 13px var(--disp); font-variant-numeric: tabular-nums; }
 .ring { stroke: var(--s1); stroke-width: 2; }
 .trend { stroke: var(--tx2); stroke-width: 1.5; stroke-dasharray: 5 5; }
 .pr-dot { fill: var(--gold); }
