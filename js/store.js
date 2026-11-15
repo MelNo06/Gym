@@ -3,7 +3,7 @@ import { LIBRARY, DEFAULT_GROUPS, toGroup } from './library.js';
 import { shade } from './colors.js';
 import { dayKey, parseDay } from './util.js';
 
-export const APP_VERSION = '1.3.0';
+export const APP_VERSION = '1.3.1';
 const DB = 'gym', STORE = 'kv', SCHEMA = 2;
 const KEYS = ['exercises', 'workouts', 'routines', 'measurements', 'gyms', 'groups', 'profile', 'settings', 'active', 'meta'];
 

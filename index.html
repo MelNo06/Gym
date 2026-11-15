@@ -17,8 +17,38 @@
 <link rel="icon" type="image/png" href="icons/icon-192.png">
 <link rel="preload" href="fonts/barlow-condensed-600.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="css/app.css">
+<style>
+/* Opening animation. Inline so it shows before the stylesheet and scripts arrive. */
+html, body { margin: 0; background: #000; }
+#splash { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: #000; transition: opacity .34s ease; }
+#splash svg { width: 176px; height: 176px; transition: transform .42s cubic-bezier(.3, 0, .2, 1); }
+#splash.out { opacity: 0; pointer-events: none; }
+#splash.out svg { transform: scale(1.5); }
+#splash rect { transform-box: fill-box; transform-origin: center; }
+.sp-bar { animation: sp-bar .42s cubic-bezier(.2, .8, .2, 1) both; }
+.sp-l { animation: sp-left .46s cubic-bezier(.2, 1.35, .35, 1) both; }
+.sp-r { animation: sp-right .46s cubic-bezier(.2, 1.35, .35, 1) both; }
+.sp-1 { animation-delay: .22s; } .sp-2 { animation-delay: .36s; }
+.sp-c { animation: sp-pop .3s cubic-bezier(.2, 1.4, .4, 1) .62s both; }
+@keyframes sp-bar { from { transform: scaleX(0); opacity: 0; } }
+@keyframes sp-left { from { transform: translateX(-340px); opacity: 0; } }
+@keyframes sp-right { from { transform: translateX(340px); opacity: 0; } }
+@keyframes sp-pop { from { transform: scaleY(0); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { #splash rect { animation: none; } #splash.out svg { transform: none; } }
+</style>
 </head>
 <body class="loading">
+<div id="splash" aria-hidden="true">
+  <svg viewBox="0 0 1024 1024">
+    <rect class="sp-bar" x="150" y="488" width="724" height="48" rx="24" fill="#f4f2ed"/>
+    <rect class="sp-l sp-1" x="276" y="360" width="60" height="304" rx="26" fill="#e9c025"/>
+    <rect class="sp-r sp-1" x="688" y="360" width="60" height="304" rx="26" fill="#20c45f"/>
+    <rect class="sp-l sp-2" x="182" y="300" width="80" height="424" rx="30" fill="#f4514f"/>
+    <rect class="sp-r sp-2" x="762" y="300" width="80" height="424" rx="30" fill="#4392f7"/>
+    <rect class="sp-c" x="350" y="446" width="28" height="132" rx="12" fill="#f4f2ed"/>
+    <rect class="sp-c" x="646" y="446" width="28" height="132" rx="12" fill="#f4f2ed"/>
+  </svg>
+</div>
 <div id="app">
   <main id="view"></main>
   <button id="mini" hidden aria-label="Continue workout"></button>

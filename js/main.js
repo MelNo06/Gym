@@ -7,6 +7,7 @@ import { historyTab } from './views/history.js';
 import { progressTab, exercisesTab } from './views/progress.js';
 import { meTab } from './views/me.js';
 import { resumeWorkout } from './views/editor.js';
+import { fitScreen } from './fit.js';
 
 const TABS = [
   ['workout', 'Workout', 'lift', workoutTab],
@@ -31,6 +32,7 @@ function render() {
     h('span', { class: 'mini-dot' }), h('span', { class: 'mini-name' }, a.name || 'Workout'),
     h('b', { 'data-elapsed': '' }, fmtClock((Date.now() - a.start) / 1000)), h('span', { class: 'mini-go' }, 'Continue'));
   syncWake();
+  fitScreen();
 }
 mini.addEventListener('click', resumeWorkout);
 setInterval(() => {
@@ -69,7 +71,11 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 // Keep sheets and page bottoms above the on-screen keyboard.
 if (window.visualViewport) {
   const vv = window.visualViewport;
-  const kb = () => document.documentElement.style.setProperty('--kb', Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) + 'px');
+  const kb = () => {
+    const hidden = Math.round(window.innerHeight - vv.height - vv.offsetTop);
+    // With a keyboard up, also lift past the part of the app that was stretched below the reported window.
+    document.documentElement.style.setProperty('--kb', (hidden > 40 ? hidden + fitScreen() : Math.max(0, hidden)) + 'px');
+  };
   vv.addEventListener('resize', kb); vv.addEventListener('scroll', kb);
 }
 
@@ -88,15 +94,30 @@ function healViewport() {
 }
 document.addEventListener('focusout', () => setTimeout(healViewport, 180));
 
+// ---- opening animation ----
+// The splash is plain markup in index.html so it is on screen before any script runs.
+// It stays for its animation (about a second), then fades into the app.
+function hideSplash() {
+  const el = document.getElementById('splash');
+  if (!el) return;
+  const quick = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  setTimeout(() => {
+    el.classList.add('out');
+    setTimeout(() => el.remove(), 420);
+  }, Math.max(0, (quick ? 250 : 1150) - performance.now()));
+}
+
 // ---- start ----
 history.replaceState({ depth: 0 }, '');
 setTabRenderer(render);
 init().then(() => {
   document.body.classList.remove('loading');
   render();
+  hideSplash();
   // Come back to a workout that was running when the app was closed.
   if (S.active && Date.now() - S.active.start < 12 * 36e5) resumeWorkout();
 }).catch(e => {
   console.error(e);
+  document.getElementById('splash')?.remove();
   view.replaceChildren(h('div', { class: 'empty' }, h('div', { class: 'empty-title' }, 'The app could not start'), h('p', null, String(e?.message || e))));
 });

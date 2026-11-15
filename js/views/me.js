@@ -7,6 +7,7 @@ import { sheet, confirmBox, toast, field, refresh } from '../ui.js';
 import { xyChart, C } from '../charts.js';
 import { chartCard, rangeControl, perMonth, gymDot } from './common.js';
 import { tile } from './editor.js';
+import { screenGap } from '../fit.js';
 
 const latest = key => S.measurements.slice().reverse().find(m => m[key] != null);
 export function ageFrom(birth, now = Date.now()) {
@@ -268,7 +269,8 @@ export function meTab(rerender) {
         info.usage != null ? `The app uses ${num(info.usage / 1048576, 1)} MB.` : '') : null),
 
     h('section', { class: 'card' }, h('h3', null, 'Settings'),
-      toggle('Keep the screen on during a workout', 'wake', 'You can still lock the phone yourself.')),
+      toggle('Keep the screen on during a workout', 'wake', 'You can still lock the phone yourself.'),
+      screenGap ? toggle('Stretch the app to the bottom edge', 'stretch', 'Fills the empty strip under the tab bar. Turn it off if the tab bar looks cut off.') : null),
 
     h('section', { class: 'card' }, h('h3', null, 'Demo data'),
       h('p', { class: 'chart-note' }, S.meta.demo ? 'You are looking at made-up demo data.' : 'Fills the app with 18 months of made-up training so you can see what the graphs look like.'),

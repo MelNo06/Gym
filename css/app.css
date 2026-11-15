@@ -18,7 +18,7 @@
 html, body { height: 100%; margin: 0; background: var(--bg); overscroll-behavior: none; }
 /* The shell is sized with dvh, not inset: 0. In an installed iOS web app, inset-based sizing can stop short of the bottom edge. */
 body {
-  position: fixed; top: 0; left: 0; right: 0; height: 100%; height: 100dvh; overflow: hidden; color: var(--tx);
+  position: fixed; top: 0; left: 0; right: 0; height: 100%; height: calc(100dvh + var(--vfix, 0px)); overflow: hidden; color: var(--tx);
   font: 16px/1.4 -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', Roboto, sans-serif;
   -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; -webkit-font-smoothing: antialiased; touch-action: manipulation;
 }
@@ -38,6 +38,8 @@ small { font-size: 13px; color: var(--tx3); }
 
 /* ---------- shell ---------- */
 #app { position: absolute; inset: 0; display: flex; flex-direction: column; }
+/* Solid black behind the status bar, so scrolled content never runs under the clock. */
+#app::before { content: ''; position: absolute; z-index: 5; top: 0; left: 0; right: 0; height: var(--st); background: var(--bg); }
 #view { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: calc(var(--st) + 18px) 16px 32px; display: flex; flex-direction: column; gap: 14px; }
 #view > *, .page-body > * { flex-shrink: 0; }
 #tabbar { display: grid; grid-template-columns: repeat(5, 1fr); padding: 0 6px calc(2px + var(--sb)); background: var(--bg); border-top: 1px solid var(--line); }
