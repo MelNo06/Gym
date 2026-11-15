@@ -77,8 +77,23 @@ function avgCard(title, list, now, yearStart) {
       h('div', null, h('b', null, streakWeeks(now, list)), h('span', null, 'Week streak'))));
 }
 
+/** Seconds of gym time and of cardio time in one workout. Cardio inside a gym session is taken off its gym time. */
+function split(w) {
+  let cardio = 0, gym = false, any = false;
+  for (const we of w.exercises) {
+    const ex = exById(we.exId);
+    if (!ex) continue;
+    if (isCardio(ex)) { any = true; for (const s of we.sets) cardio += s.sec || 0; } else gym = true;
+  }
+  const dur = Math.max(0, (w.end - w.start) / 1000);
+  return gym ? { gym: Math.max(0, dur - cardio), cardio } : { gym: 0, cardio: any ? cardio || dur : 0 };
+}
+/** 7500 s -> "2h 05m", 1500 s -> "25m", 0 -> "0m" */
+const hm = sec => { const m = Math.round(sec / 60); return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` : `${m}m`; };
+
 export function historyTab(rerender) {
   const now = Date.now(), ws = S.workouts, days = byDay();
+  const week = ws.filter(w => w.start >= weekStart(now)).reduce((a, w) => { const t = split(w); a.gym += t.gym; a.cardio += t.cardio; return a; }, { gym: 0, cardio: 0 });
   const count = (a, b) => ws.filter(w => w.start >= a && w.start < b).length;
   const cur = new Date(cursor), year = cur.getFullYear(), yearStart = new Date(new Date(now).getFullYear(), 0, 1).getTime();
   const shift = n => { const d = new Date(cursor); view === 'month' ? d.setMonth(d.getMonth() + n) : d.setFullYear(d.getFullYear() + n); cursor = d.getTime(); rerender(); };
@@ -122,9 +137,8 @@ export function historyTab(rerender) {
   return [
     h('div', { class: 'tab-head' }, h('h1', null, 'History'),
       h('button', { class: 'btn-pill ghost', onclick: () => editWorkout(null) }, icon('plus', 16), 'Log past workout')),
-    h('div', { class: 'tiles tiles-4' },
-      tile('This week', count(weekStart(now), Infinity)), tile('This month', count(monthStart(now), Infinity)),
-      tile('This year', count(yearStart, Infinity)), tile('All time', ws.length)),
+    h('div', { class: 'tiles tiles-wide' },
+      tile('Gym this week', hm(week.gym)), tile('Cardio this week', hm(week.cardio)), tile('Lifetime sessions', ws.length)),
     ws.length ? avgCard('Gym sessions per week', ws.filter(w => kinds(w).gym), now, yearStart) : null,
     ws.length ? avgCard('Cardio sessions per week', ws.filter(w => kinds(w).cardio), now, yearStart) : null,
     h('section', { class: 'card' },

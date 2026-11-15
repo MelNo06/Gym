@@ -1,6 +1,6 @@
 // Offline support. Bump VERSION (and APP_VERSION in js/store.js) with every change,
 // otherwise installed copies keep serving the old files.
-const VERSION = '1.2.2';
+const VERSION = '1.2.3';
 const CACHE = 'gym-' + VERSION;
 const ASSETS = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',

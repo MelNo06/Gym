@@ -95,7 +95,7 @@ function xLabel(svg, px, H, w, text) {
 
 /**
  * Line / band / dot chart over time (or over any numeric x when xTicks is given).
- * o = { x0, x1, series:[{pts:[{x,y}], color, kind:'line'|'linedots'|'dots', dash, width, area}],
+ * o = { x0, x1, series:[{pts:[{x,y,r?}], color, kind:'line'|'linedots'|'dots', dash, width, area}],
  *       band:{pts:[{x,lo,hi}], color} or bands:[...], markers:[{x,y}], trend:{x0,y0,x1,y1}, zero, yFmt,
  *       xTicks:[{x,label}], scrub:[{x,title,rows,marks:[{y,color}]}], label }
  */
@@ -109,7 +109,9 @@ export function xyChart(el, w, H, o) {
   if (lo === Infinity) { lo = 0; hi = 1; }
   if (o.zero) lo = Math.min(lo, 0);
   const padY = (hi - lo) * 0.1 || Math.abs(hi) * 0.05 || 1;
-  const ticks = niceTicks(o.zero && lo === 0 ? 0 : lo - padY, hi + padY, H > 150 ? 4 : 3);
+  // Durations get tick marks on whole minutes (5:00, 10:00, ...) once they span more than a few minutes.
+  const k = o.clock && hi - lo > 150 ? 60 : 1;
+  const ticks = niceTicks((o.zero && lo === 0 ? 0 : lo - padY) / k, (hi + padY) / k, H > 150 ? 4 : 3).map(t => t * k);
   lo = ticks[0]; hi = ticks.at(-1);
   const labels = ticks.map(fmt);
   const { svg, ml, mr, mt, pw, ph } = frame(w, H, ticks, labels, o.label);
@@ -137,9 +139,10 @@ export function xyChart(el, w, H, o) {
     if (sr.area && sr.pts.length > 1) svg.append(s('path', { d: `${path}L${f(X(sr.pts.at(-1).x))},${f(Y(lo))}L${f(X(sr.pts[0].x))},${f(Y(lo))}Z`, fill: sr.color, opacity: .1 }));
     if (kind !== 'dots' && sr.pts.length > 1) svg.append(s('path', { d: path, fill: 'none', stroke: sr.color, 'stroke-width': sr.width || 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round', 'stroke-dasharray': sr.dash || null }));
     const sparse = sr.pts.length <= pw / 9;
-    if (kind === 'dots' || (kind === 'linedots' && sr.pts.length <= pw / 4) || sr.pts.length === 1) {
+    const sized = sr.pts.some(p => p.r != null);      // points that carry their own radius are always drawn
+    if (sized || kind === 'dots' || (kind === 'linedots' && sr.pts.length <= pw / 4) || sr.pts.length === 1) {
       const r = sparse ? 3.5 : 2;
-      for (const p of sr.pts) svg.append(s('circle', { cx: f(X(p.x)), cy: f(Y(p.y)), r, fill: sr.color, class: sparse ? 'ring' : null }));
+      for (const p of sr.pts) svg.append(s('circle', { cx: f(X(p.x)), cy: f(Y(p.y)), r: p.r ?? r, fill: sr.color, class: sparse || sized ? 'ring' : null }));
     }
   }
   if (o.trend) svg.append(s('line', { x1: X(o.trend.x0), y1: Y(o.trend.y0), x2: X(o.trend.x1), y2: Y(o.trend.y1), class: 'trend' }));

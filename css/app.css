@@ -134,6 +134,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 0; 
 .tiles { display: grid; gap: 8px; }
 .tiles-3 { grid-template-columns: repeat(3, 1fr); }
 .tiles-4 { grid-template-columns: repeat(4, 1fr); }
+.tiles-wide { grid-template-columns: 1fr 1fr .85fr; }
+.tiles-wide .tile b { font-size: 28px; }
 .tile { background: var(--s1); border: 1px solid var(--line); border-radius: 12px; padding: 10px 6px 8px; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
 .sheet .tile { background: var(--s2); }
 .tile b { font: 600 24px/1 var(--disp); white-space: nowrap; font-variant-numeric: tabular-nums; }

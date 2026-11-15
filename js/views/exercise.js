@@ -1,7 +1,7 @@
 // Exercise detail: graphs, all-time records and session history for one lift.
 // Every graph draws one line per gym, in that gym's colour.
 import { h, icon, num, big, fmtDate, fmtClock, fmtDur, signed, DAY } from '../util.js';
-import { S, exById, TYPES, isBW, gymById, groupById, exColor } from '../store.js';
+import { S, exById, TYPES, isBW, isCardio, gymById, groupById, exColor } from '../store.js';
 import { sessionsOf, sessionsAt, gymsOf, records, repBest, trend, rangeFrom, RANGE_TEXT, setText, extText, MAX_REPS } from '../stats.js';
 import { pushPage, segmented, empty, cap } from '../ui.js';
 import { xyChart, C } from '../charts.js';
@@ -60,8 +60,8 @@ function graphs({ ex, named, groups }, all, rerender) {
   const gymRow = (s, color) => [{ label: 'Workout', value: s.w.name }, ...(named ? [{ label: 'Gym', value: gymById(s.gym)?.name || 'No gym', color }] : [])];
 
   /** One line per gym of a per-session number. A single line also gets a trend. */
-  const lines = ({ name, get, fmt, axis, sub, unit, dp = 1, rows, note, zero = false, extra, legendExtra, height = 190, value, chip = true }) => {
-    const gs = groups.map(g => ({ ...g, pts: inR.filter(s => keyOf(s) === g.key).map(s => ({ x: s.t, y: get(s), s, color: g.color })).filter(p => p.y != null) })).filter(g => g.pts.length);
+  const lines = ({ name, get, fmt, axis, sub, unit, dp = 1, rows, note, zero = false, extra, legendExtra, height = 190, value, chip = true, size }) => {
+    const gs = groups.map(g => ({ ...g, pts: inR.filter(s => keyOf(s) === g.key).map(s => ({ x: s.t, y: get(s), s, color: g.color, ...(size ? { r: size(s) } : {}) })).filter(p => p.y != null) })).filter(g => g.pts.length);
     if (!gs.length) return null;
     const pts = gs.flatMap(g => g.pts).sort((a, b) => a.x - b.x);
     const tr = gs.length === 1 ? trend(pts) : null, last = pts.at(-1);
@@ -76,7 +76,7 @@ function graphs({ ex, named, groups }, all, rerender) {
       chip: chip && tr ? (unit === 'time' ? deltaChip(tr.perMonth, `${signed(tr.perMonth, 0)} s / month`) : perMonth(tr, unit, dp)) : null,
       legendItems: legendItems.length ? legendItems : null,
       draw: (el, w, H) => xyChart(el, w, H, {
-        ...base, zero, yFmt: axis || (v => num(v, 1)), label: name, trend: tr, ...more,
+        ...base, zero, yFmt: axis || (v => num(v, 1)), clock: axis === fmtClock, label: name, trend: tr, ...more,
         series: more.series || gs.map(g => ({ pts: g.pts, color: g.color })),
         scrub: pts.map(p => ({
           x: p.x, title: title(p.s),
@@ -90,22 +90,27 @@ function graphs({ ex, named, groups }, all, rerender) {
   if (!inR.length) {
     out.push(empty(`No sessions in the ${RANGE_TEXT[range]}`, `Last trained on ${dateFull(all.at(-1).t)}. Pick a longer range to see it.`));
   } else if (ex.type === 'time') {
-    out.push(
-      lines({ name: 'Longest set', get: s => s.maxSec || null, fmt: fmtClock, axis: fmtClock, unit: 'time' }),
-      lines({ name: 'Total time per session', get: s => s.sec || null, fmt: fmtClock, axis: fmtClock, unit: 'time', zero: true }));
+    // Timed cardio (stair climber, jump rope) is about how long. Timed holds such as planks also show the longest set.
+    if (!isCardio(ex)) out.push(lines({ name: 'Longest set', get: s => s.maxSec || null, fmt: fmtClock, axis: fmtClock, unit: 'time' }));
+    out.push(lines({ name: 'Time per session', get: s => s.sec || null, fmt: fmtClock, axis: fmtClock, unit: 'time', zero: true }));
   } else if (ex.type === 'dist') {
-    // Cardio: how far, how long, and how fast. Touching any of the three shows all four numbers of that session.
+    // Cardio. Graph 1: speed over time, each dot sized by the distance of that session. Graph 2: time per session.
     const kmh = s => (s.km > 0 && s.sec > 0 ? s.km / (s.sec / 3600) : null);
+    const far = Math.max(...inR.map(s => s.km || 0), 1e-9);
     const rows = (s, color) => [
       { label: 'Distance', value: `${num(s.km, 2)} km`, color },
       ...(s.sec ? [{ label: 'Time', value: fmtClock(s.sec) }] : []),
-      ...(s.pace ? [{ label: 'Pace', value: `${fmtClock(s.pace)} / km` }, { label: 'Speed', value: `${num(kmh(s), 1)} km/h` }] : []),
+      ...(s.pace ? [{ label: 'Speed', value: `${num(kmh(s), 1)} km/h` }, { label: 'Pace', value: `${fmtClock(s.pace)} / km` }] : []),
     ];
     out.push(
-      lines({ name: 'Distance per session', get: s => s.km || null, fmt: v => `${num(v, 2)} km`, unit: 'km', dp: 2, zero: true, rows }),
+      lines({
+        name: 'Speed', get: kmh, fmt: v => `${num(v, 1)} km/h`, axis: v => num(v, 1), unit: 'km/h', dp: 2, rows, height: 220,
+        size: s => 3 + 6.5 * Math.sqrt((s.km || 0) / far),          // dot area grows with distance
+        sub: s => `${num(s.km, 2)} km in ${fmtClock(s.sec)}, ${fmtClock(s.pace)} / km`,
+        note: 'Average speed of each session. A bigger dot is a longer distance, so a slower big dot is a long session, not a bad day. Touch a dot for distance, time, speed and pace.',
+      }),
       lines({ name: 'Time per session', get: s => s.sec || null, fmt: fmtClock, axis: fmtClock, unit: 'time', zero: true, rows }),
-      lines({ name: 'Pace', get: s => s.pace, fmt: v => `${fmtClock(v)} / km`, axis: fmtClock, unit: 'time', chip: false, rows,
-        sub: s => `${num(kmh(s), 1)} km/h. A lower line means you were faster.` }));
+      inR.some(s => s.km && !s.sec) ? h('p', { class: 'hint' }, 'Sessions logged without a time have no speed and are missing from the first graph.') : null);
   } else if (ex.type === 'bw') {
     out.push(
       lines({ name: 'Most reps in a set', get: s => s.maxReps || null, fmt: v => `${num(v)} reps`, axis: v => num(v, 0), unit: 'reps' }),
