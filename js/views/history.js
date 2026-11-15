@@ -1,9 +1,9 @@
 // History tab (calendar + list of workouts) and the read-only workout page.
 import { h, icon, uid, big, fmtDate, fmtTime, fmtDur, fmtClock, num, dayKey, weekStart, monthStart, MONTHS, MON, DAY } from '../util.js';
-import { S, save, exById, bwAt, gymById, exColor, isCardio } from '../store.js';
+import { S, save, exById, bwAt, gymById, groupById, exColor, isCardio } from '../store.js';
 import { idx, workoutStats, summarize, setText, streakWeeks } from '../stats.js';
 import { pushPage, back, actionSheet, confirmBox, toast, segmented, empty } from '../ui.js';
-import { setTable, gymDot } from './common.js';
+import { setTable, gymDot, exDot, colorParts, mixBar } from './common.js';
 import { tile, editWorkout, startWorkout } from './editor.js';
 import { openExercise } from './exercise.js';
 
@@ -33,10 +33,11 @@ export function workoutCard(w) {
   const bw = bwAt(w.start);
   const lines = w.exercises.map(we => { const ex = exById(we.exId), sm = ex && summarize(ex, we.sets, bw); return sm ? [ex, sm] : null; }).filter(Boolean);
   return h('section', { class: 'card tap', onclick: () => openWorkout(w.id) },
+    mixBar(colorParts(w.exercises)),
     h('div', { class: 'card-head' }, h('b', null, w.name), h('span', { class: 'muted' }, `${fmtDate(w.start, { weekday: true })}, ${fmtTime(w.start)}`)),
     statLine(w),
     h('div', { class: 'ex-lines' }, lines.slice(0, 6).map(([ex, sm]) =>
-      h('div', null, h('span', null, `${sm.sets.length} × ${ex.name}`), h('span', { class: 'muted' }, bestText(ex, sm)))),
+      h('div', null, h('span', null, exDot(ex), `${sm.sets.length} × ${ex.name}`), h('span', { class: 'muted' }, bestText(ex, sm)))),
       lines.length > 6 ? h('div', { class: 'muted' }, `and ${lines.length - 6} more`) : null));
 }
 
@@ -47,6 +48,21 @@ function dayTap(dayMs, list) {
   actionSheet(fmtDate(dayMs, { weekday: true, year: true }), [{ label: 'Log a workout on this day', onClick: () => editWorkout(null, dayMs) }]);
 }
 
+/** A ring split into the muscle colours trained that day, each arc as long as its share of the sets. */
+function ringOf(parts) {
+  if (!parts.length) return 'var(--tx3)';
+  if (parts.length === 1) return parts[0].color;
+  const total = parts.reduce((a, p) => a + p.v, 0), gap = 1.6, stops = [];
+  let at = 0;
+  for (const p of parts) {
+    const end = at + p.v / total * 100;
+    stops.push(`${p.color} ${(at + gap).toFixed(1)}% ${(end - gap).toFixed(1)}%`, `transparent ${(end - gap).toFixed(1)}% ${(end + gap).toFixed(1)}%`);
+    at = end;
+  }
+  return `conic-gradient(transparent 0 ${gap}%, ${stops.join(', ')})`;
+}
+const dayParts = list => colorParts(list.flatMap(w => w.exercises));
+
 function monthGrid(first, days, mini) {
   const d0 = new Date(first), y = d0.getFullYear(), m = d0.getMonth();
   const n = new Date(y, m + 1, 0).getDate(), lead = (d0.getDay() + 6) % 7, today = dayKey(Date.now());
@@ -54,8 +70,10 @@ function monthGrid(first, days, mini) {
   for (let d = 1; d <= n; d++) {
     const ms = new Date(y, m, d).getTime(), k = dayKey(ms), list = days.get(k);
     const cls = 'day' + (list ? ' has' : '') + (k === today ? ' today' : '') + (ms > Date.now() ? ' future' : '');
-    cells.push(mini ? h('span', { class: cls })
-      : h('button', { class: cls, 'aria-label': `${d} ${MONTHS[m]}${list ? `, ${list.length} workout${list.length > 1 ? 's' : ''}` : ''}`, onclick: () => dayTap(ms, list) },
+    const parts = list ? dayParts(list) : [];
+    // Year view: the square takes the colour of the muscle group with the most sets that day.
+    cells.push(mini ? h('span', { class: cls, style: list ? { background: parts.length ? parts.reduce((a, p) => (p.v > a.v ? p : a)).color : 'var(--tx3)' } : null })
+      : h('button', { class: cls, style: list ? { '--ring': ringOf(parts) } : null, 'aria-label': `${d} ${MONTHS[m]}${list ? `, ${list.length} workout${list.length > 1 ? 's' : ''}: ${parts.map(p => p.name).join(', ')}` : ''}`, onclick: () => dayTap(ms, list) },
         h('span', null, d), list?.length > 1 ? h('i', null, list.length) : null));
   }
   return h('div', { class: mini ? 'cal mini' : 'cal' }, cells);
@@ -108,6 +126,10 @@ export function historyTab(rerender) {
       h('div', { class: 'cal-sub' }, tally(n, cursor, next)),
       h('div', { class: 'cal-wd' }, ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(d => h('span', null, d))),
       monthGrid(cursor, days),
+      (() => {   // which colours appear in this month
+        const parts = colorParts(ws.filter(w => w.start >= cursor && w.start < next).flatMap(w => w.exercises));
+        return parts.length ? h('div', { class: 'cal-legend' }, parts.map(p => h('span', null, h('i', { class: 'ex-dot', style: { background: p.color } }), p.name))) : null;
+      })(),
     ];
   } else {
     const n = count(new Date(year, 0, 1).getTime(), new Date(year + 1, 0, 1).getTime());
@@ -180,13 +202,14 @@ export function openWorkout(id) {
       actions: h('button', { class: 'icon-btn', 'aria-label': 'Workout options', onclick: menu }, icon('more')),
       body: [
         h('h1', { class: 'page-h1' }, w.name),
-        h('div', { class: 'muted gym-tag' }, gymById(w.gymId) ? [gymDot(gymById(w.gymId)), gymById(w.gymId).name + ' ·'] : null, `${fmtTime(w.start)}–${fmtTime(w.end)}${bw ? ` · body weight ${num(bw, 1)} kg` : ''}`),
+        h('div', { class: 'muted' }, gymById(w.gymId) ? [gymDot(gymById(w.gymId)), gymById(w.gymId).name + ' · '] : null, `${fmtTime(w.start)}–${fmtTime(w.end)}${bw ? ` · body weight ${num(bw, 1)} kg` : ''}`),
+        mixBar(colorParts(w.exercises)),
         h('div', { class: 'tiles tiles-4' }, tile('Duration', fmtDur(st.dur)), tile('Volume', big(st.vol) + ' kg'), tile('Sets', st.sets), tile('Records', st.prs, st.prs ? 'gold' : '')),
         w.notes ? h('p', { class: 'note' }, w.notes) : null,
         w.exercises.map((we, ei) => {
           const ex = exById(we.exId);
           if (!ex) return null;
-          return h('section', { class: 'card', style: { '--exc': exColor(ex) } },
+          return h('section', { class: 'card ex-tint', style: { '--exc': groupById(ex.group) ? exColor(ex) : null } },
             h('button', { class: 'ex-name', onclick: () => openExercise(ex.id) }, ex.name),
             we.notes ? h('p', { class: 'note' }, we.notes) : null,
             setTable(ex, we.sets, bw, i => prs?.get(ei + ':' + i)));

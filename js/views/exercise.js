@@ -151,7 +151,7 @@ function graphs({ ex, named, groups }, all, rerender) {
         ...(gs.length === 1 && !named ? [{ label: 'Estimate', color: gs[0].color }] : []),
         { label: 'Formula spread', color: gs.length === 1 ? gs[0].color : C.mute, kind: 'band' },
         ...(body ? [{ label: 'Body weight', color: C.mute, kind: 'dash' }] : []),
-        ...(pts.some(p => [...p.s.prs.values()].some(c => c.includes('rm'))) ? [{ label: 'Record', color: C.gold, kind: 'dot' }] : []),
+        ...(pts.some(p => [...p.s.prs.values()].some(c => c.includes('rm'))) ? [{ label: 'Record', color: C.gold, kind: 'ring' }] : []),
       ],
       rows: (s, color) => [
         { label: 'Est. 1RM', value: `${num(s.rm.lo, 1)}–${num(s.rm.hi, 1)} kg`, color },
@@ -241,7 +241,7 @@ function recordsView(ex, gym) {
 function historyView({ ex, named }, sess, shown, more) {
   const list = sess.slice().reverse();
   return [
-    list.slice(0, shown).map(s => h('section', { class: 'card tap', onclick: () => openWorkout(s.w.id) },
+    list.slice(0, shown).map(s => h('section', { class: 'card tap', style: { '--exc': groupById(ex.group) ? exColor(ex) : null }, onclick: () => openWorkout(s.w.id) },
       h('div', { class: 'card-head' }, h('b', null, fmtDate(s.t, { weekday: true, year: true })),
         h('span', { class: 'muted gym-tag' }, named ? [gymDot(gymById(s.gym), groupById(ex.group)?.color), gymById(s.gym)?.name || 'No gym'] : s.w.name)),
       s.w.exercises[s.ei].notes ? h('p', { class: 'note' }, s.w.exercises[s.ei].notes) : null,

@@ -3,6 +3,7 @@ import { h, icon, uid, fmtDate, fmtClock } from '../util.js';
 import { S, save, exById } from '../store.js';
 import { actionSheet, confirmBox, toast, empty } from '../ui.js';
 import { startWorkout, resumeWorkout, editRoutine } from './editor.js';
+import { colorParts, mixBar } from './common.js';
 
 export function workoutTab(rerender) {
   const a = S.active;
@@ -22,6 +23,7 @@ export function workoutTab(rerender) {
       ]);
     };
     return h('section', { class: 'card routine' },
+      mixBar(colorParts(r.exercises, we => Math.max(1, we.sets.length))),
       h('div', { class: 'card-head' }, h('b', null, r.name), h('button', { class: 'icon-btn', 'aria-label': 'Routine options', onclick: menu }, icon('more'))),
       h('p', { class: 'routine-ex' }, names.join(', ') || 'No exercises'),
       h('button', { class: 'btn btn-soft', onclick: () => startWorkout({ name: r.name, exercises: r.exercises, routineId: r.id }) }, 'Start routine'));

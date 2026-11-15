@@ -1,8 +1,8 @@
 // Hand-built SVG charts: no library, works offline, sized to their container.
 import { h, s, DAY, MON, clamp, num } from './util.js';
 
-/** Chart colours as plain hex (validated for colour-blind separation on the dark card surface). */
-export const C = { c1: '#3987e5', c2: '#d95926', c3: '#199e70', gold: '#e8b04a', mute: '#6e7a88' };
+/** Neutral chart colours. Everything with a hue comes from the muscle palette in colors.js. */
+export const C = { c1: '#f4f2ed', gold: '#f4f2ed', mute: '#716f6a' };   // chalk and grey: the interface itself has no hue
 
 /** A div that (re)draws its chart whenever its width changes. */
 export function mount(draw, height = 190) {
@@ -146,7 +146,7 @@ export function xyChart(el, w, H, o) {
     }
   }
   if (o.trend) svg.append(s('line', { x1: X(o.trend.x0), y1: Y(o.trend.y0), x2: X(o.trend.x1), y2: Y(o.trend.y1), class: 'trend' }));
-  for (const m of o.markers || []) svg.append(s('circle', { cx: f(X(m.x)), cy: f(Y(m.y)), r: 4.5, class: 'pr-dot ring' }));
+  for (const m of o.markers || []) svg.append(s('circle', { cx: f(X(m.x)), cy: f(Y(m.y)), r: 4.2, class: 'pr-dot' }));
 
   el.append(svg);
   scrub(el, svg, (o.scrub || []).map(p => ({ px: X(p.x), title: p.title, rows: p.rows, marks: (p.marks || []).filter(m => m.y != null).map(m => ({ py: Y(m.y), color: m.color })) })),

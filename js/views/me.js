@@ -205,6 +205,16 @@ async function doWipe(text) {
   wipe(); refresh(); toast('All data deleted');
 }
 
+/** What the phone reports about the screen. Shown under App so a layout problem can be pinned down from a screenshot. */
+function displayInfo() {
+  const probe = h('div', { style: 'position:fixed;visibility:hidden;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)' });
+  document.body.append(probe);
+  const cs = getComputedStyle(probe), top = Math.round(parseFloat(cs.paddingTop) || 0), bottom = Math.round(parseFloat(cs.paddingBottom) || 0);
+  probe.remove();
+  const installed = navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+  return `${installed ? 'Installed app' : 'Browser'}, window ${window.innerWidth} × ${window.innerHeight}, screen ${screen.width} × ${screen.height}, safe area top ${top} and bottom ${bottom}.`;
+}
+
 let info = null, showAll = false;
 export function meTab(rerender) {
   if (!info) storageInfo().then(i => { info = i; rerender(); });
@@ -268,6 +278,7 @@ export function meTab(rerender) {
 
     h('section', { class: 'card' }, h('h3', null, 'App'),
       h('p', { class: 'chart-note' }, `Version ${APP_VERSION}. Updates install on their own when you open the app with a connection.`),
+      h('p', { class: 'chart-note' }, 'Display: ', displayInfo()),
       h('button', { class: 'btn btn-soft', onclick: async () => {
         const reg = await navigator.serviceWorker?.getRegistration();
         if (!reg) { toast('Updates need the installed app.'); return; }

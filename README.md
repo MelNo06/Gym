@@ -2,6 +2,8 @@
 
 A personal workout log that runs as a Home Screen web app on the iPhone. It works offline and keeps all data on the device.
 
+The interface is black, graphite and chalk-white with no hue of its own, so that every colour on screen is a muscle group.
+
 - **Workout:** log sets against your previous session, with set types, notes, routines and live record badges.
 - **History:** month and year calendar, every past workout, back-filling and editing.
 - **Progress:** every logged exercise with its trend (tap for its graphs), and sets per week for each muscle group.

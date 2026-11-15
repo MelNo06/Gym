@@ -1,7 +1,7 @@
 // Pieces shared by several screens.
 import { h, icon, num, signed } from '../util.js';
-import { S, save, exColor } from '../store.js';
-import { shade } from '../colors.js';
+import { S, save, exColor, exById, groupById } from '../store.js';
+import { shade, NEUTRAL } from '../colors.js';
 import { calc, setText, PR_LABEL, RANGES } from '../stats.js';
 import { segmented } from '../ui.js';
 import { mount, legend } from '../charts.js';
@@ -10,6 +10,26 @@ import { mount, legend } from '../charts.js';
 export const gymDot = (g, colorKey) => h('i', { class: 'gym-dot', style: { background: g ? shade(colorKey, g.shade) : 'var(--tx3)' } });
 /** Dot in the colour of an exercise's muscle group. */
 export const exDot = ex => h('i', { class: 'ex-dot', style: { background: exColor(ex) } });
+
+/**
+ * Sets per muscle group of a list of logged exercises, in the order of the muscle group list.
+ * Each part carries the group's colour, so a workout can be drawn as a strip or ring of its muscles.
+ */
+export function colorParts(exercises, count = we => we.sets.filter(s => s.t !== 'w').length) {
+  const by = new Map();
+  for (const we of exercises) {
+    const ex = exById(we.exId), n = ex ? count(we) : 0;
+    if (!n) continue;
+    const k = groupById(ex.group) ? ex.group : '';
+    by.set(k, (by.get(k) || 0) + n);
+  }
+  return [...S.groups.map(g => g.id), ''].filter(k => by.has(k)).map(k => {
+    const g = groupById(k);
+    return { key: k, v: by.get(k), color: g ? shade(g.color) : NEUTRAL[2], name: g ? g.name : 'No group' };
+  });
+}
+/** Thin strip split into the muscle colours of a workout or routine, each as wide as its share of the sets. */
+export const mixBar = parts => (parts.length ? h('div', { class: 'mix', 'aria-hidden': 'true' }, parts.map(p => h('i', { style: { flex: String(p.v), background: p.color } }))) : null);
 
 export const prChips = cats => (cats || []).map(c => h('span', { class: 'pr' }, icon('trophy', 13), PR_LABEL[c]));
 
